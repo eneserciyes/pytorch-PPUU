@@ -35,16 +35,16 @@ def compute_uncertainty_batch(model, input_images, input_states, actions, target
     input_states = input_states.unsqueeze(0)
     actions      = actions.     unsqueeze(0)
     Z_rep        = Z.           unsqueeze(0)
-    input_images = input_images.expand(n_models, bsize, model.opt.ncond, 3, model.opt.height, model.opt.width)
-    input_states = input_states.expand(n_models, bsize, model.opt.ncond, 4)
+    input_images = input_images.expand(n_models, bsize, model.OPT.ncond, 3, model.OPT.height, model.OPT.width)
+    input_states = input_states.expand(n_models, bsize, model.OPT.ncond, 4)
     actions      = actions.     expand(n_models, bsize, npred, 2)
     Z_rep        = Z_rep.       expand(n_models, bsize, npred, -1)
     input_images = input_images.contiguous()
     input_states = input_states.contiguous()
     actions      = actions.     contiguous()
     Z_rep        = Z_rep.       contiguous()
-    input_images = input_images.view(bsize * n_models, model.opt.ncond, 3, model.opt.height, model.opt.width)
-    input_states = input_states.view(bsize * n_models, model.opt.ncond, 4)
+    input_images = input_images.view(bsize * n_models, model.OPT.ncond, 3, model.OPT.height, model.OPT.width)
+    input_states = input_states.view(bsize * n_models, model.OPT.ncond, 4)
     actions      = actions.     view(bsize * n_models, npred, 2)
     Z_rep        = Z_rep.       view(n_models * bsize, npred, -1)
 
@@ -72,7 +72,7 @@ def compute_uncertainty_batch(model, input_images, input_states, actions, target
     if hasattr(model, 'cost'):
         pred_costs = model.cost(pred_images.view(-1, 3, 117, 24), pred_states.data.view(-1, 4))
         pred_costs = pred_costs.view(n_models, bsize, npred, 2)
-        pred_costs = pred_costs[:, :, :, 0] + model.opt.lambda_l * pred_costs[:, :, :, 1]
+        pred_costs = pred_costs[:, :, :, 0] + model.OPT.lambda_l * pred_costs[:, :, :, 1]
         if detach:
             pred_costs.detach_()
     else:

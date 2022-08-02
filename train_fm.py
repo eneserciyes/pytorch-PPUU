@@ -7,7 +7,6 @@ import importlib
 import models
 import torch.nn as nn
 
-
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -53,7 +52,6 @@ torch.manual_seed(opt.seed)
 torch.cuda.manual_seed(opt.seed)
 dataloader = DataLoader(None, opt, opt.dataset)
 
-
 # define model file name
 opt.model_file = f'{opt.model_dir}/model={opt.model}-layers={opt.layers}-bsize={opt.batch_size}-ncond={opt.ncond}-npred={opt.npred}-lrt={opt.lrt}-nfeature={opt.nfeature}-dropout={opt.dropout}'
 
@@ -69,7 +67,6 @@ opt.model_file += f'-warmstart={opt.warmstart}'
 opt.model_file += f'-seed={opt.seed}'
 print(f'[will save model as: {opt.model_file}]')
 
-
 # parameters specific to the I-80 dataset
 opt.n_inputs = 4
 opt.n_actions = 2
@@ -81,7 +78,7 @@ if opt.layers == 3:
 elif opt.layers == 4:
     opt.h_height = 7
     opt.h_width = 1
-opt.hidden_size = opt.nfeature*opt.h_height*opt.h_width
+opt.hidden_size = opt.nfeature * opt.h_height * opt.h_width
 
 mfile = opt.model_file + '.model'
 
@@ -134,18 +131,15 @@ def expand(x, actions, nrep):
     bsize = images.size(0)
     nsteps = images.size(1)
     images_ = images.unsqueeze(0).expand(nrep, bsize, nsteps, 3, opt.height, opt.width)
-    images_ = images_.contiguous().view(nrep*bsize, nsteps, 3, opt.height, opt.width)
+    images_ = images_.contiguous().view(nrep * bsize, nsteps, 3, opt.height, opt.width)
     states_ = states.unsqueeze(0).expand(nrep, bsize, nsteps, opt.n_inputs)
-    states_ = states_.contiguous().view(nrep*bsize, nsteps, opt.n_inputs)
+    states_ = states_.contiguous().view(nrep * bsize, nsteps, opt.n_inputs)
     if actions is not None:
         actions_ = actions.unsqueeze(0).expand(nrep, bsize, nsteps, opt.n_actions)
-        actions_ = actions_.contiguous().view(nrep*bsize, nsteps, opt.n_actions).contiguous()
+        actions_ = actions_.contiguous().view(nrep * bsize, nsteps, opt.n_actions).contiguous()
         return [images_, states_, None], actions_
     else:
         return [images_, states_]
-
-
-
 
 
 def train(nbatches, npred):
@@ -157,7 +151,7 @@ def train(nbatches, npred):
         pred, loss_p = model(inputs[: -1], actions, targets, z_dropout=opt.z_dropout)
         loss_p = loss_p[0]
         loss_i, loss_s = compute_loss(targets, pred)
-        loss = loss_i + loss_s + opt.beta*loss_p
+        loss = loss_i + loss_s + opt.beta * loss_p
 
         # VAEs get NaN loss sometimes, so check for it
         if not math.isnan(loss.item()):
@@ -186,7 +180,7 @@ def test(nbatches):
         pred, loss_p = model(inputs[: -1], actions, targets, z_dropout=opt.z_dropout)
         loss_p = loss_p[0]
         loss_i, loss_s = compute_loss(targets, pred)
-        loss = loss_i + loss_s + opt.beta*loss_p
+        loss = loss_i + loss_s + opt.beta * loss_p
 
         total_loss_i += loss_i.item()
         total_loss_s += loss_s.item()
@@ -197,6 +191,7 @@ def test(nbatches):
     total_loss_s /= nbatches
     total_loss_p /= nbatches
     return total_loss_i, total_loss_s, total_loss_p
+
 
 writer = utils.create_tensorboard_writer(opt)
 
@@ -220,7 +215,7 @@ for i in range(200):
     torch.save({'model': model,
                 'optimizer': optimizer.state_dict(),
                 'n_iter': n_iter}, opt.model_file + '.model')
-    if (n_iter/opt.epoch_size) % 10 == 0:
+    if (n_iter / opt.epoch_size) % 10 == 0:
         torch.save(model, opt.model_file + f'.step{n_iter}.model')
     model.cuda()
     log_string = f'step {n_iter} | '

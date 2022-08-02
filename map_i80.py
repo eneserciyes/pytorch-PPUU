@@ -326,6 +326,9 @@ class I80(Simulator):
             self.controlled_car['v_id'] = vehicle_id
         self.frame = frame - int(self.delta_t * 10)
         self.vehicles_history = set()
+        self.dump_folder = "test_dump_replay"
+        print(f'Creating folder {self.dump_folder}')
+        os.system(f'mkdir -p screen-dumps/{self.dump_folder}')
         # # Account for off-track vehicles
         # with open('off_track.pkl', 'rb') as f:
         #     self.off_track = pickle.load(f)
@@ -384,9 +387,9 @@ class I80(Simulator):
                     car.lanes = self.lanes
                     car.look_ahead = self.look_ahead
                     # print(f'Controlling car {car.id}')
-                    # self.dump_folder = f'{self._t_slot}_{car.id}'
-                    # print(f'Creating folder {self.dump_folder}')
-                    # system(f'mkdir -p screen-dumps/{self.dump_folder}')
+                    self.dump_folder = f'{self._t_slot}_{car.id}'
+                    print(f'Creating folder {self.dump_folder}')
+                    os.system(f'mkdir -p screen-dumps/{self.dump_folder}')
                     if self.store_sim_video:
                         self.ghost = self.EnvCar(car_df, self.offset, self.look_ahead, self.screen_size[0], f,
                                                  self.smoothing_window, dt=self.delta_t)

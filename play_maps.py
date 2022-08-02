@@ -2,6 +2,8 @@ import argparse
 import numpy
 import gym
 
+from traffic_gym import Simulator
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-nb_conditions', type=int, default=10)
 parser.add_argument('-display', type=int, default=1)
@@ -62,7 +64,7 @@ env_names = {
 }
 
 print('Building the environment (loading data, if any)')
-env = gym.make(env_names[opt.map])
+env: Simulator = gym.make(env_names[opt.map])
 
 for episode in range(opt.nb_episodes):
     # env.reset(frame=int(input('Frame: ')), time_slot=0)

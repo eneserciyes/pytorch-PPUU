@@ -14,7 +14,7 @@ dependencies:
   - scikit-learn
   - scikit-image
   - pip:
-    - gym
+    - gym==0.15.6
     - pygame>=2.0.0.dev6
     - jupytext
     - ipdb

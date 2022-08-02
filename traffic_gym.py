@@ -934,11 +934,11 @@ class Simulator(core.Env):
             draw_text(self.screen, f'frame #: {self.frame}', (120, 2), font=self.font[30])
             draw_text(self.screen, f'fps: {self.mean_fps:.0f}', (270, 2), font=self.font[30])
 
-            pygame.display.flip()
+            # pygame.display.flip()
 
             # # save surface as image, for visualisation only
             # pygame.image.save(self.screen, "screen_surface.png")
-            # pygame.image.save(self.screen, f'screen-dumps/{self.dump_folder}/{self.frame:08d}.png')
+            pygame.image.save(self.screen, f'screen-dumps/{self.dump_folder}/{self.frame:08d}.png')
 
             # capture the closing window and mouse-button-up event
             for event in pygame.event.get():
