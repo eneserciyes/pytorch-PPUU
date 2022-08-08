@@ -58,7 +58,7 @@ opt.eval_dir = opt.model_dir + f'eval/'
 print(f'[loading {opt.model_dir + opt.mfile}]')
 model = torch.load(opt.model_dir + opt.mfile)
 if type(model) is dict: model = model['model']
-model = model.cuda()
+model.intype("gpu")
 model.eval()
 # if opt.cuda == 1:
     # model.intype('gpu')
@@ -123,7 +123,6 @@ for i in range(opt.n_batches):
     with torch.no_grad():
         torch.cuda.empty_cache()
         inputs, actions, targets, _, _ = dataloader.get_batch_fm('test', opt.npred)
-
         # save ground truth for the first 10 x batch_size samples
         if i < 10 and opt.save_video:
             for b in range(opt.batch_size):

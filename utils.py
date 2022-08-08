@@ -5,6 +5,7 @@ import math
 import numpy
 import os
 import pdb
+import ipdb
 import re
 import sys
 from datetime import datetime
@@ -120,7 +121,6 @@ def proximity_cost(images, states, car_size=(6.4, 14.3), green_channel=1, unnorm
     # Account for 1 metre overlap (low data accuracy)
     alpha = 1 * SCALE * (24 / 3.7)  # 1 m overlap collision
     # Create separable proximity mask
-
     max_x = torch.ceil((crop_h - torch.clamp(length - alpha, min=0)) / 2)
     max_y = torch.ceil((crop_w - torch.clamp(width - alpha, min=0)) / 2)
     max_x = max_x.view(bsize, 1).expand(bsize, npred).contiguous().view(bsize * npred).cuda()
