@@ -10,7 +10,7 @@ for npred in 30; do
                         for lambda_l in 0.2; do
                             for lambda_o in 1.0; do
                                 for infer_z in 0; do
-                                    for seed in 1 2 3; do
+                                    for seed in 1; do
                                         sbatch submit_train_mpur.slurm \
                                             npred=$npred \
                                             u_reg=$u_reg \

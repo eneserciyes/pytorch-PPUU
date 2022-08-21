@@ -15,10 +15,11 @@ import utils
 
 # encodes a sequence of input frames and states, and optionally a cost or action, to a hidden representation
 class encoder(nn.Module):
-    def __init__(self, opt, a_size, n_inputs, states=True, state_input_size=4):
+    def __init__(self, opt, a_size, n_inputs, states=True, state_input_size=4, n_channels=3):
         super(encoder, self).__init__()
         self.opt = opt
         self.a_size = a_size
+        self.n_channels = n_channels
         self.n_inputs = opt.ncond if n_inputs is None else n_inputs
         # frame encoder
         if opt.layers == 3:
@@ -29,7 +30,7 @@ class encoder(nn.Module):
                 opt.nfeature,
             ]
             self.f_encoder = nn.Sequential(
-                nn.Conv2d(3 * self.n_inputs, self.feature_maps[0], 4, 2, 1),
+                nn.Conv2d(self.n_channels * self.n_inputs, self.feature_maps[0], 4, 2, 1),
                 nn.Dropout2d(p=opt.dropout, inplace=True),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(self.feature_maps[0], self.feature_maps[1], 4, 2, 1),
@@ -87,7 +88,7 @@ class encoder(nn.Module):
     def forward(self, images, states=None, actions=None):
         bsize = images.size(0)
         h = self.f_encoder(
-            images.view(bsize, self.n_inputs * 3, self.opt.height, self.opt.width)
+            images.view(bsize, self.n_inputs * self.n_channels, self.opt.height, self.opt.width)
         )
         if states is not None:
             h = h + self.s_encoder(states.contiguous().view(bsize, -1)).view(h.size())
@@ -605,10 +606,12 @@ class FwdCNN(nn.Module):
     def create_policy_net(self, opt):
         if opt.policy == "policy-gauss":
             self.policy_net = StochasticPolicy(opt)
-        if opt.policy == "policy-ten":
-            self.policy_net = PolicyTEN(opt)
-        elif opt.policy == "policy-vae":
-            self.policy_net = PolicyVAE(opt)
+        elif opt.policy == "policy-deterministic":
+            self.policy_net = DeterministicPolicy(opt)
+        # if opt.policy == "policy-ten":
+        #     self.policy_net = PolicyTEN(opt)
+        # elif opt.policy == "policy-vae":
+        #     self.policy_net = PolicyVAE(opt)
 
 
 # this version adds the actions *after* the z variables
@@ -810,10 +813,12 @@ class FwdCNN_VAE(nn.Module):
     def create_policy_net(self, opt):
         if opt.policy == "policy-gauss":
             self.policy_net = StochasticPolicy(opt)
-        if opt.policy == "policy-ten":
-            self.policy_net = PolicyTEN(opt)
-        elif opt.policy == "policy-vae":
-            self.policy_net = PolicyVAE(opt)
+        elif opt.policy == "policy-deterministic":
+            self.policy_net = DeterministicPolicy(opt)
+        # if opt.policy == "policy-ten":
+        #     self.policy_net = PolicyTEN(opt)
+        # elif opt.policy == "policy-vae":
+        #     self.policy_net = PolicyVAE(opt)
 
     def create_prior_net(self, opt):
         self.prior_net = PriorGaussian(opt, opt.context_dim)

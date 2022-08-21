@@ -87,9 +87,9 @@ class DataLoader:
         if os.path.exists(splits_path):
             print(f'[loading data splits: {splits_path}]')
             self.splits = torch.load(splits_path)
-            self.train_indx = self.splits.get('train_indx')
-            self.valid_indx = self.splits.get('valid_indx')
-            self.test_indx = self.splits.get('test_indx')
+            self.train_indx = self.splits.get('train')
+            self.valid_indx = self.splits.get('val')
+            self.test_indx = self.splits.get('test')
         else:
             print('[generating data splits]')
             rgn = numpy.random.RandomState(0)
@@ -100,12 +100,12 @@ class DataLoader:
             self.valid_indx = perm[n_train : n_train + n_valid]
             self.test_indx = perm[n_train + n_valid :]
             torch.save(dict(
-                train_indx=self.train_indx,
-                valid_indx=self.valid_indx,
-                test_indx=self.test_indx,
+                train=self.train_indx,
+                val=self.valid_indx,
+                test=self.test_indx,
             ), splits_path)
 
-        stats_path = data_dir + '/data_stats.pth'
+        stats_path = data_dir + '/data_stats_with_diff.pth'
         if os.path.isfile(stats_path):
             print(f'[loading data stats: {stats_path}]')
             stats = torch.load(stats_path)
@@ -181,7 +181,7 @@ class DataLoader:
         images  = torch.stack(images)
         states  = torch.stack(states)
         actions = torch.stack(actions)
-        sizes   = torch.tensor(sizes)
+        sizes   = torch.tensor(sizes, dtype=torch.float32)
         ego_cars = torch.stack(ego_cars)
 
         # Normalise actions, state_vectors, state_images

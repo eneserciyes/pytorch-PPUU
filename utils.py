@@ -469,7 +469,7 @@ def embed(Z, ztop, ndim=3):
             'ztop_only_isomap': ztop_only_isomap}
 
 
-def parse_command_line(parser=None):
+def parse_command_line(parser=None, args=None):
     if parser is None: parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     # data params
     parser.add_argument('-seed', type=int, default=1)
@@ -504,7 +504,7 @@ def parse_command_line(parser=None):
     m2 = 'model=fwd-cnn-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-gclip=5.0-' + \
          'warmstart=0-seed=1.step200000.model'
     m3 = 'model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-' + \
-         'beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step400000.model'
+         'beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model'  # changed to 200000 from 400000
     parser.add_argument('-mfile', type=str, default=m3, help='dynamics model used to train the policy network')
     parser.add_argument('-value_model', type=str, default='')
     parser.add_argument('-load_model_file', type=str, default='')
@@ -514,12 +514,12 @@ def parse_command_line(parser=None):
     parser.add_argument('-l2reg', type=float, default=0.0)
     parser.add_argument('-no_cuda', action='store_true')
     parser.add_argument('-enable_tensorboard', action='store_true',
-                    help='Enables tensorboard logging.')
+                        help='Enables tensorboard logging.')
     parser.add_argument('-tensorboard_dir', type=str, default='models/policy_networks',
                         help='path to the directory where to save tensorboard log. If passed empty path' \
                              ' no logs are saved.')
 
-    opt = parser.parse_args()
+    opt = parser.parse_args() if args is None else parser.parse_args(args)
     opt.n_inputs = 4
     opt.n_actions = 2
     opt.height = 117
@@ -556,6 +556,7 @@ def build_model_file_name(opt):
 
     print(f'[will save as: {opt.model_file}]')
 
+
 def create_tensorboard_writer(opt):
     tensorboard_enabled = opt.tensorboard_dir != '' and opt.enable_tensorboard
     if tensorboard_enabled:
@@ -563,7 +564,7 @@ def create_tensorboard_writer(opt):
         if hasattr(opt, 'model_file'):
             model_name = os.path.basename(opt.model_file)
         elif hasattr(opt, 'mfile'):
-            model_name = os.path.basename(opt.policy_model) # eval_policy has mfile
+            model_name = os.path.basename(opt.policy_model)  # eval_policy has mfile
         else:
             raise AttributeError("options doesn't contain neither model_file nor mfile field")
         script_name = os.path.splitext(sys.argv[0])[0]
@@ -576,7 +577,8 @@ def create_tensorboard_writer(opt):
 
 
 def denormalise_state(state, model_stats):
-    return (model_stats['s_mean'] + model_stats['s_std'] * state.detach().cpu())[:,:,2:] / 24 * 3.7 * 3.6
+    return (model_stats['s_mean'] + model_stats['s_std'] * state.detach().cpu())[:, :, 2:] / 24 * 3.7 * 3.6
+
 
 def normalize_inputs(images, states, stats, device='cuda'):
     images = images.clone().float().div_(255.0)
