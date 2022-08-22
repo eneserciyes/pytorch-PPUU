@@ -47,7 +47,7 @@ class encoder(nn.Module):
                 opt.nfeature,
             ]
             self.f_encoder = nn.Sequential(
-                nn.Conv2d(3 * self.n_inputs, self.feature_maps[0], 4, 2, 1),
+                nn.Conv2d(self.n_channels * self.n_inputs, self.feature_maps[0], 4, 2, 1),
                 nn.Dropout2d(p=opt.dropout, inplace=True),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(self.feature_maps[0], self.feature_maps[1], 4, 2, 1),
@@ -399,12 +399,12 @@ class PriorGaussian(nn.Module):
         self.sigma_net = nn.Linear(opt.n_hidden, nz)
 
     def forward(
-        self,
-        input_images,
-        input_states,
-        normalize_inputs=False,
-        normalize_outputs=False,
-        n_samples=1,
+            self,
+            input_images,
+            input_states,
+            normalize_inputs=False,
+            normalize_outputs=False,
+            n_samples=1,
     ):
         if normalize_inputs:
             input_images = input_images.clone().float().div_(255.0)
@@ -713,15 +713,15 @@ class FwdCNN_VAE(nn.Module):
         return pred_image, pred_state
 
     def forward(
-        self,
-        inputs,
-        actions,
-        targets,
-        save_z=False,
-        sampling=None,
-        z_dropout=0.0,
-        z_seq=None,
-        noise=None,
+            self,
+            inputs,
+            actions,
+            targets,
+            save_z=False,
+            sampling=None,
+            z_dropout=0.0,
+            z_seq=None,
+            noise=None,
     ):
         # import ipdb
         # ipdb.set_trace()
@@ -865,6 +865,8 @@ class CostPredictor(nn.Module):
     def __init__(self, opt):
         super(CostPredictor, self).__init__()
         self.opt = opt
+        import ipdb
+        ipdb.set_trace()
         self.encoder = encoder(opt, 0, 1)
         self.hsize = opt.nfeature * self.opt.h_height * self.opt.h_width
         self.proj = nn.Linear(self.hsize, opt.n_hidden)
@@ -882,6 +884,7 @@ class CostPredictor(nn.Module):
 
     def forward(self, state_images, states):
         bsize = state_images.size(0)
+        self.encoder.n_channels = 3  # hack for previous code
         h = self.encoder(state_images, states).view(bsize, self.hsize)
         h = self.proj(h)
         h = self.fc(h)
@@ -891,7 +894,7 @@ class CostPredictor(nn.Module):
 # Stochastic Policy, output is a diagonal Gaussian and learning uses the re-parametrization trick.
 class StochasticPolicy(nn.Module):
     def __init__(
-        self, opt, context_dim=0, actor_critic=False, output_dim=None, n_channels=4
+            self, opt, context_dim=0, actor_critic=False, output_dim=None, n_channels=4
     ):
         super().__init__()
         self.opt = opt
@@ -930,15 +933,15 @@ class StochasticPolicy(nn.Module):
             self.rewards = []
 
     def forward(
-        self,
-        state_images,
-        states,
-        context=None,
-        sample=True,
-        normalize_inputs=False,
-        normalize_outputs=False,
-        n_samples=1,
-        std_mult=1.0,
+            self,
+            state_images,
+            states,
+            context=None,
+            sample=True,
+            normalize_inputs=False,
+            normalize_outputs=False,
+            n_samples=1,
+            std_mult=1.0,
     ):
 
         if normalize_inputs:
@@ -969,7 +972,7 @@ class StochasticPolicy(nn.Module):
         # a = 3 * torch.tanh(a)
 
         if (
-            normalize_outputs
+                normalize_outputs
         ):  # done only at inference time, if only "volatile" was still a thing...
             a = a.data
             a.clamp_(-3, 3)
@@ -1015,14 +1018,14 @@ class DeterministicPolicy(nn.Module):
             )
 
     def forward(
-        self,
-        state_images,
-        states,
-        context=None,
-        sample=True,
-        normalize_inputs=False,
-        normalize_outputs=False,
-        n_samples=1,
+            self,
+            state_images,
+            states,
+            context=None,
+            sample=True,
+            normalize_inputs=False,
+            normalize_outputs=False,
+            n_samples=1,
     ):
 
         if normalize_inputs:
@@ -1043,7 +1046,7 @@ class DeterministicPolicy(nn.Module):
         a = self.fc(h).view(bsize, self.n_outputs)
 
         if (
-            normalize_outputs
+                normalize_outputs
         ):  # done only at inference time, if only "volatile" was still a thing...
             a = a.data
             a.clamp_(-3, 3)
@@ -1081,14 +1084,14 @@ class ValueFunction(nn.Module):
         )
 
     def forward(
-        self,
-        state_images,
-        states,
-        context=None,
-        sample=True,
-        normalize_inputs=False,
-        normalize_outputs=False,
-        n_samples=1,
+            self,
+            state_images,
+            states,
+            context=None,
+            sample=True,
+            normalize_inputs=False,
+            normalize_outputs=False,
+            n_samples=1,
     ):
         bsize = state_images.size(0)
         h = self.encoder(state_images, states).view(bsize, self.hsize)
@@ -1123,12 +1126,12 @@ class PolicyMDN(nn.Module):
         self.sigma_net = nn.Linear(opt.n_hidden, opt.n_mixture * self.n_outputs)
 
     def forward(
-        self,
-        state_images,
-        states,
-        sample=False,
-        normalize_inputs=False,
-        normalize_outputs=False,
+            self,
+            state_images,
+            states,
+            sample=False,
+            normalize_inputs=False,
+            normalize_outputs=False,
     ):
 
         if normalize_inputs:

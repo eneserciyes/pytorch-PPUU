@@ -4,7 +4,7 @@ import ipdb
 import torch
 import time
 from dataloader import DataLoader
-from team_code.utils import get_opt, set_seed_and_flags
+from team_code.tcutils import get_opt, set_seed_and_flags
 
 
 def load_model(mfile):

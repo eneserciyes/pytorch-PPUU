@@ -524,7 +524,7 @@ def main():
 
     writer = utils.create_tensorboard_writer(opt)
 
-    n_test = len(splits["test_indx"])
+    n_test = len(splits["test"])
 
     # set_start_method('spawn')
     # pool = Pool(opt.num_processes)
@@ -535,7 +535,7 @@ def main():
     total_images = 0
 
     for j in range(n_test):
-        car_path = dataloader.ids[splits["test_indx"][j]]
+        car_path = dataloader.ids[splits["test"][j]]
         timeslot, car_id = utils.parse_car_path(car_path)
         car_sizes = torch.tensor(
             dataloader.car_sizes[sorted(list(dataloader.car_sizes.keys()))[timeslot]][
