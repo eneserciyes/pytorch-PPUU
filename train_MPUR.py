@@ -171,6 +171,7 @@ def start(what, nbatches, npred):
 
 print("[training]")
 utils.log(opt.model_file + ".log", f"[job name: {opt.model_file}]")
+utils.log(opt.model_file + ".log", f"Options used: {opt}")
 n_iter = 0
 losses = OrderedDict(
     p="proximity",

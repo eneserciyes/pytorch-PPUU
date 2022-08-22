@@ -3,6 +3,7 @@ import torch.optim as optim
 import numpy
 import utils
 
+
 ##################################################################################
 # functions for planning and training policy networks using the forward model
 ##################################################################################
@@ -33,20 +34,20 @@ def compute_uncertainty_batch(model, input_images, input_states, actions, target
 
     input_images = input_images.unsqueeze(0)
     input_states = input_states.unsqueeze(0)
-    actions      = actions.     unsqueeze(0)
-    Z_rep        = Z.           unsqueeze(0)
+    actions = actions.unsqueeze(0)
+    Z_rep = Z.unsqueeze(0)
     input_images = input_images.expand(n_models, bsize, model.opt.ncond, 3, model.opt.height, model.opt.width)
     input_states = input_states.expand(n_models, bsize, model.opt.ncond, 4)
-    actions      = actions.     expand(n_models, bsize, npred, 2)
-    Z_rep        = Z_rep.       expand(n_models, bsize, npred, -1)
+    actions = actions.expand(n_models, bsize, npred, 2)
+    Z_rep = Z_rep.expand(n_models, bsize, npred, -1)
     input_images = input_images.contiguous()
     input_states = input_states.contiguous()
-    actions      = actions.     contiguous()
-    Z_rep        = Z_rep.       contiguous()
+    actions = actions.contiguous()
+    Z_rep = Z_rep.contiguous()
     input_images = input_images.view(bsize * n_models, model.opt.ncond, 3, model.opt.height, model.opt.width)
     input_states = input_states.view(bsize * n_models, model.opt.ncond, 4)
-    actions      = actions.     view(bsize * n_models, npred, 2)
-    Z_rep        = Z_rep.       view(n_models * bsize, npred, -1)
+    actions = actions.view(bsize * n_models, npred, 2)
+    Z_rep = Z_rep.view(n_models * bsize, npred, -1)
 
     model.train()  # turn on dropout, for uncertainty estimation
     pred_images, pred_states = [], []
@@ -89,11 +90,11 @@ def compute_uncertainty_batch(model, input_images, input_states, actions, target
 
     pred_images = pred_images.view(n_models, bsize, npred, -1)
     pred_states = pred_states.view(n_models, bsize, npred, -1)
-    pred_costs  = pred_costs. view(n_models, bsize, npred, -1)
+    pred_costs = pred_costs.view(n_models, bsize, npred, -1)
     # use variance rather than standard deviation, since it is not differentiable at 0 due to sqrt
     pred_images_var = torch.var(pred_images, 0).mean(2)
     pred_states_var = torch.var(pred_states, 0).mean(2)
-    pred_costs_var  = torch.var(pred_costs,  0).mean(2)
+    pred_costs_var = torch.var(pred_costs, 0).mean(2)
     pred_costs_mean = torch.mean(pred_costs, 0)
     pred_images = pred_images.view(n_models * bsize, npred, 3, model.opt.height, model.opt.width)
     pred_states = pred_states.view(n_models * bsize, npred, 4)
@@ -113,7 +114,7 @@ def compute_uncertainty_batch(model, input_images, input_states, actions, target
     if compute_total_loss:
         # this is the uncertainty loss of different terms together. We don't include the uncertainty
         # of the value function, it's normal to have high uncertainty there.
-        u_loss_costs  = torch.relu((pred_costs_var  - model.u_costs_mean)  / model.u_costs_std  - model.opt.u_hinge)
+        u_loss_costs = torch.relu((pred_costs_var - model.u_costs_mean) / model.u_costs_std - model.opt.u_hinge)
         u_loss_states = torch.relu((pred_states_var - model.u_states_mean) / model.u_states_std - model.opt.u_hinge)
         u_loss_images = torch.relu((pred_images_var - model.u_images_mean) / model.u_images_std - model.opt.u_hinge)
         total_u_loss = u_loss_costs.mean() + u_loss_states.mean() + u_loss_images.mean()
@@ -153,18 +154,18 @@ def estimate_uncertainty_stats(model, dataloader, n_batches=100, npred=200):
 
     u_images = torch.stack(u_images).view(-1, npred)
     u_states = torch.stack(u_states).view(-1, npred)
-    u_costs  = torch.stack(u_costs). view(-1, npred)
+    u_costs = torch.stack(u_costs).view(-1, npred)
     u_values = torch.stack(u_values)
     # speeds = torch.stack(speeds)
 
     model.u_images_mean = u_images.mean(0)
     model.u_states_mean = u_states.mean(0)
-    model.u_costs_mean  = u_costs. mean(0)
+    model.u_costs_mean = u_costs.mean(0)
     model.u_values_mean = u_values.mean()
 
     model.u_images_std = u_images.std(0)
     model.u_states_std = u_states.std(0)
-    model.u_costs_std  = u_costs. std(0)
+    model.u_costs_std = u_costs.std(0)
     model.u_values_std = u_values.std()
     dataloader.opt.batch_size = data_bsize
 
@@ -297,7 +298,8 @@ def train_policy_net_mpur(model, inputs, targets, car_sizes, n_models=10, sampli
             z_t = model.reparameterize(mu, logvar, True)
         else:
             z_t = Z[t]
-        pred_image, pred_state = model.forward_single_step(input_images[:, :, :3].contiguous(), input_states, actions, z_t)
+        pred_image, pred_state = model.forward_single_step(input_images[:, :, :3].contiguous(), input_states, actions,
+                                                           z_t)
         # Auto regress: enqueue output as new element of the input
         pred_image = torch.cat((pred_image, input_ego_car[:, :1]), dim=2)
         input_images = torch.cat((input_images[:, 1:], pred_image), 1)
@@ -336,12 +338,14 @@ def train_policy_net_mpur(model, inputs, targets, car_sizes, n_models=10, sampli
                 torch.nn.utils.clip_grad_norm_([Z_adv], 1)
                 optimizer_z.step()
                 # print(f'[z opt | iter: {k} | pred cost: {pred_cost_adv.mean().item()}]')
-                print(f'[z opt | iter: {k} | pred cost: {pred_cost_adv.mean().item()} | u_cost: {total_u_loss.mean().item()}]')
+                print(
+                    f'[z opt | iter: {k} | pred cost: {pred_cost_adv.mean().item()} | u_cost: {total_u_loss.mean().item()}]')
 
     gamma_mask = torch.tensor([0.99 ** t for t in range(npred + 1)]).cuda().unsqueeze(0)
     if not hasattr(model, 'cost'):
         # ipdb.set_trace()
-        proximity_cost, _ = utils.proximity_cost(pred_images[:, :, :3].contiguous(), pred_states.data, car_sizes, unnormalize=True,
+        proximity_cost, _ = utils.proximity_cost(pred_images[:, :, :3].contiguous(), pred_states.data, car_sizes,
+                                                 unnormalize=True,
                                                  s_mean=model.stats['s_mean'], s_std=model.stats['s_std'])
         if n_updates_z > 0:
             proximity_cost = 0.5 * proximity_cost + 0.5 * pred_cost_adv.squeeze()
@@ -363,7 +367,7 @@ def train_policy_net_mpur(model, inputs, targets, car_sizes, n_models=10, sampli
         lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
     else:
         lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
-        offroad_cost = torch.mean(offroad_cost * gamma_mask[:, :npred])
+        offroad_cost = torch.tensor([0.0]).to(lane_loss.device)  # torch.mean(offroad_cost * gamma_mask[:, :npred])
         proximity_loss = torch.mean(proximity_cost * gamma_mask[:, :npred])
 
     _, _, _, _, _, _, total_u_loss = compute_uncertainty_batch(

@@ -899,7 +899,7 @@ class StochasticPolicy(nn.Module):
         super().__init__()
         self.opt = opt
         self.n_channels = n_channels
-        self.encoder = encoder(opt, a_size=0, n_inputs=opt.ncond)
+        self.encoder = encoder(opt, a_size=0, n_inputs=opt.ncond, n_channels=n_channels)
         self.n_outputs = opt.n_actions if output_dim is None else output_dim
         self.hsize = opt.nfeature * self.opt.h_height * self.opt.h_width
         self.proj = nn.Linear(self.hsize, opt.n_hidden)
