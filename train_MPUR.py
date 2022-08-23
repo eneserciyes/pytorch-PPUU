@@ -110,6 +110,7 @@ def start(what, nbatches, npred):
         offroad=0,
         action=0,
         policy=0,
+        goal=0,
     )
     for j in range(nbatches):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
@@ -118,6 +119,7 @@ def start(what, nbatches, npred):
             inputs,
             targets,
             car_sizes,
+            goal_distance=opt.goal_distance,
             n_models=10,
             lrt_z=opt.lrt_z,
             n_updates_z=opt.z_updates,
@@ -129,7 +131,7 @@ def start(what, nbatches, npred):
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
-            # TODO: add goal cost here
+            + opt.lambda_g * pred["goal"]  # add goal cost here
         )
 
         if not math.isnan(pred["policy"].item()):
@@ -180,6 +182,7 @@ losses = OrderedDict(
     o="offroad",
     u="uncertainty",
     a="action",
+    g="goal",
     π="policy",
 )
 
@@ -191,8 +194,12 @@ for i in range(500):
     with torch.no_grad():  # Torch, please please please, do not track computations :)
         valid_losses = start("valid", opt.epoch_size // 2, opt.npred)
 
-    wandb.log({f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i)
-    wandb.log({f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i)
+    wandb.log(
+        {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
+    )
+    wandb.log(
+        {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
+    )
     # if writer is not None:
     # for key in train_losses:
     #     writer.add_scalar(f"Loss/train_{key}", train_losses[key], i)

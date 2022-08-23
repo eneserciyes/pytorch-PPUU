@@ -405,6 +405,22 @@ def get_goal(current_position: torch.Tensor, goal_list: torch.Tensor) -> torch.T
     return torch.stack(goals_in_front)
 
 
+def compute_goal_cost(
+    current_positions: torch.Tensor, current_goals: torch.Tensor
+) -> torch.Tensor:
+    """
+    current_positions: B x Rollout x 2
+    current_goals: B x Rollout x 2
+
+    return:
+    goal_cost: B x Rollout
+    """
+    diff = current_goals - current_positions
+    goal_cost = torch.linalg.norm(diff, dim=2)
+
+    return goal_cost
+
+
 def train_policy_net_mpur(
     model,
     inputs,
@@ -427,8 +443,15 @@ def train_policy_net_mpur(
     input_images = torch.cat((input_images_orig, input_ego_car), dim=2)
     input_states = input_states_orig.clone()
     bsize = input_images.size(0)
-    npred = target_images.size(1) - 10
-    pred_images, pred_states, pred_costs, pred_actions, current_goals, current_positions = [], [], [], [], [], []
+    npred = target_images.size(1)
+    (
+        pred_images,
+        pred_states,
+        pred_costs,
+        pred_actions,
+        current_goals,
+        current_positions,
+    ) = ([], [], [], [], [], [])
 
     # total_ploss = torch.zeros(1).cuda()
     # Sample latent variables from a (fixed) prior
@@ -468,14 +491,14 @@ def train_policy_net_mpur(
         input_images = torch.cat((input_images[:, 1:], pred_image), 1)
         input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
-        # TODO: record goals here
+        # record goals here
         current_positions.append(current_position)
         current_goals.append(current_goal)
         pred_images.append(pred_image)
         pred_states.append(pred_state)
         pred_actions.append(actions)
 
-        # TODO: update current position
+        # update current position
         current_position = input_states[:, -1, :2]
 
     pred_images = torch.cat(pred_images, 1)
@@ -569,18 +592,20 @@ def train_policy_net_mpur(
         pred_costs = pred_costs.view(bsize, npred, 2)
         proximity_cost = pred_costs[:, :, 0]
         lane_cost = pred_costs[:, :, 1]
-    # TODO: compute goal loss
-    if hasattr(model, "value_function"):
-        proximity_loss = torch.mean(torch.cat((proximity_cost, v), 1) * gamma_mask)
-        lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
-    else:
-        lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
-        offroad_cost = torch.tensor([0.0]).to(
-            lane_loss.device
-        )  # torch.mean(offroad_cost * gamma_mask[:, :npred])
-        proximity_loss = torch.mean(proximity_cost * gamma_mask[:, :npred])
-        # TODO: computer goal loss with gamma mask
+    # compute goal cost
+    goal_cost = compute_goal_cost(current_positions, current_goals)
 
+    # if hasattr(model, "value_function"):
+    #     proximity_loss = torch.mean(torch.cat((proximity_cost, v), 1) * gamma_mask)
+    #     lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
+    # else:
+    lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
+    offroad_cost = torch.tensor([0.0]).to(
+        lane_loss.device
+    )  # torch.mean(offroad_cost * gamma_mask[:, :npred])
+    proximity_loss = torch.mean(proximity_cost * gamma_mask[:, :npred])
+    # computer goal loss with gamma mask
+    goal_loss = torch.mean(goal_cost * gamma_mask[:, :npred])
     _, _, _, _, _, _, total_u_loss = compute_uncertainty_batch(
         model,
         input_images,
@@ -606,6 +631,7 @@ def train_policy_net_mpur(
         proximity=proximity_loss,
         lane=lane_loss,
         offroad=offroad_cost,
+        goal=goal_loss,
         uncertainty=total_u_loss,
         action=loss_a,
     )
