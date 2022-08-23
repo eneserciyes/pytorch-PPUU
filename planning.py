@@ -593,7 +593,7 @@ def train_policy_net_mpur(
         proximity_cost = pred_costs[:, :, 0]
         lane_cost = pred_costs[:, :, 1]
     # compute goal cost
-    goal_cost = compute_goal_cost(current_positions, current_goals)
+    goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
 
     # if hasattr(model, "value_function"):
     #     proximity_loss = torch.mean(torch.cat((proximity_cost, v), 1) * gamma_mask)
