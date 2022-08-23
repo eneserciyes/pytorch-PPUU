@@ -129,6 +129,7 @@ def start(what, nbatches, npred):
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
+            # TODO: add goal cost here
         )
 
         if not math.isnan(pred["policy"].item()):
