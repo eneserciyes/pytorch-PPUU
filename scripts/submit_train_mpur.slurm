@@ -5,7 +5,7 @@
 #SBATCH --error=logs/train_MPUR_%j.err
 #SBATCH --time=48:00:00
 #SBATCH --gres gpu:1
-#SBATCH --constraint="vita"
+#SBATCH --account="vita"
 #SBATCH --nodes=1
 #SBATCH --mem=48000
 #SBATCH --mail-type=END,FAIL # notifications for job done & fail

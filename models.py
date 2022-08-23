@@ -945,7 +945,7 @@ class StochasticPolicy(nn.Module):
     ):
 
         if normalize_inputs:
-            state_images = state_images[:, :3].clone().float().div_(255.0)
+            state_images = state_images.clone().float().div_(255.0)
             states -= self.stats["s_mean"].view(1, 4).expand(states.size())
             states /= self.stats["s_std"].view(1, 4).expand(states.size())
             if state_images.dim() == 4:  # if processing single vehicle

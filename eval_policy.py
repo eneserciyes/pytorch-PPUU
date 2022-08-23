@@ -53,7 +53,7 @@ def get_optimal_pool_size():
     available_processes = len(os.sched_getaffinity(0))
     # we can't use more than 10, as in that case we don't fit into Gpu.
     optimal_pool_size = min(10, available_processes)
-    return 1  # optimal_pool_size
+    return optimal_pool_size
 
 
 def load_models(opt, data_path, device="cuda"):
@@ -201,24 +201,24 @@ def parse_args():
     parser.add_argument("-debug", action="store_true", help=" ")
     parser.add_argument("-model_dir", type=str, default="models/", help=" ")
     M1 = (
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-        + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
+            "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
+            + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M2 = (
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-        + "beta=1e-06-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
+            "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
+            + "beta=1e-06-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M3 = (
-        "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
-        + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
+            "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
+            + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M4 = (
-        "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
-        + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
+            "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
+            + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M5 = (
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-        + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step400000.model"
+            "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
+            + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step400000.model"
     )
     parser.add_argument("-mfile", type=str, default=M5, help=" ")
     parser.add_argument("-value_model", type=str, default="", help=" ")
@@ -236,7 +236,7 @@ def parse_args():
         type=str,
         default="models/planning_results",
         help="path to the directory where to save tensorboard log."
-        + "If passed empty path no logs are saved.",
+             + "If passed empty path no logs are saved.",
     )
     parser.add_argument(
         "-num_processes",
@@ -264,16 +264,18 @@ def parse_args():
 
 
 def process_one_episode(
-    opt,
-    env,
-    car_path,
-    forward_model,
-    policy_network_il,
-    data_stats,
-    plan_file,
-    index,
-    car_sizes,
+        opt,
+        env,
+        car_path,
+        forward_model,
+        policy_network_il,
+        data_stats,
+        plan_file,
+        index,
+        car_sizes,
 ):
+    # import ipdb
+    # ipdb.set_trace()
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
         grad_movie_dir = path.join(
@@ -466,6 +468,17 @@ def process_one_episode(
     return returned
 
 
+def get_scenario_variables(dataloader, splits, j):
+    car_path = dataloader.ids[splits["test"][j]]
+    timeslot, car_id = utils.parse_car_path(car_path)
+    car_sizes = torch.tensor(
+        dataloader.car_sizes[sorted(list(dataloader.car_sizes.keys()))[timeslot]][
+            car_id
+        ]
+    )[None, :]
+    return car_path, timeslot, car_id, car_sizes
+
+
 def main():
     opt = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -476,7 +489,7 @@ def main():
 
     data_path = "traffic-data/state-action-cost/data_i80_v0"
 
-    dataloader = DataLoader(None, opt, "i80", single_shard=True)
+    dataloader = DataLoader(None, opt, "i80")
     (
         forward_model,
         value_function,
@@ -526,25 +539,37 @@ def main():
 
     n_test = len(splits["test"])
 
-    # set_start_method('spawn')
-    # pool = Pool(opt.num_processes)
-    #
     async_results = []
 
     time_started = time.time()
     total_images = 0
+    if opt.num_processes > 0:
+        set_start_method('spawn')
+        pool = Pool(opt.num_processes)
+        for j in range(n_test):
+            car_path, timeslot, car_id, car_sizes = get_scenario_variables(dataloader, splits, j)
+            async_results.append(
+                pool.apply_async(
+                    process_one_episode, (
+                        opt,
+                        env,
+                        car_path,
+                        forward_model,
+                        policy_network_il,
+                        data_stats,
+                        plan_file,
+                        j,
+                        car_sizes,
+                    )
+                )
+            )
 
     for j in range(n_test):
-        car_path = dataloader.ids[splits["test"][j]]
-        timeslot, car_id = utils.parse_car_path(car_path)
-        car_sizes = torch.tensor(
-            dataloader.car_sizes[sorted(list(dataloader.car_sizes.keys()))[timeslot]][
-                car_id
-            ]
-        )[None, :]
-        async_results.append(
-            # pool.apply_async(
-            process_one_episode(
+        if opt.num_processes > 0:
+            simulation_result = async_results[j].get()
+        else:
+            car_path, timeslot, car_id, car_sizes = get_scenario_variables(dataloader, splits, j)
+            simulation_result = process_one_episode(
                 opt,
                 env,
                 car_path,
@@ -555,12 +580,6 @@ def main():
                 j,
                 car_sizes,
             )
-        )
-        # )
-        # )
-
-    for j in range(n_test):
-        simulation_result = async_results[j]  # .get()
 
         time_travelled.append(simulation_result.time_travelled)
         distance_travelled.append(simulation_result.distance_travelled)
@@ -596,9 +615,9 @@ def main():
             writer.add_scalar(
                 "ByEpisode/Distance", simulation_result.distance_travelled, j
             )
-
-    # pool.close()
-    # pool.join()
+    if opt.num_processes > 0:
+        pool.close()
+        pool.join()
 
     diff_time = time.time() - time_started
     print("avg time travelled per second is", total_images / diff_time)
