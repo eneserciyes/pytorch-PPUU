@@ -894,7 +894,7 @@ class CostPredictor(nn.Module):
 # Stochastic Policy, output is a diagonal Gaussian and learning uses the re-parametrization trick.
 class StochasticPolicy(nn.Module):
     def __init__(
-            self, opt, context_dim=0, actor_critic=False, output_dim=None, n_channels=4
+            self, opt, context_dim=0, actor_critic=False, output_dim=None, n_channels=4, goals=True
     ):
         super().__init__()
         self.opt = opt
@@ -904,6 +904,7 @@ class StochasticPolicy(nn.Module):
         self.hsize = opt.nfeature * self.opt.h_height * self.opt.h_width
         self.proj = nn.Linear(self.hsize, opt.n_hidden)
         self.context_dim = context_dim
+        self.goals = goals
 
         self.fc = nn.Sequential(
             nn.Linear(opt.n_hidden, opt.n_hidden),
@@ -932,11 +933,21 @@ class StochasticPolicy(nn.Module):
             self.saved_actions = []
             self.rewards = []
 
+        if goals:
+            self.goal_encoder = nn.Sequential(
+                nn.Linear(2, opt.n_hidden),
+                nn.ReLU(),
+                nn.Linear(opt.n_hidden, opt.n_hidden),
+                nn.ReLU(),
+                nn.Linear(opt.n_hidden, opt.n_hidden),
+            )
+
     def forward(
             self,
             state_images,
             states,
             context=None,
+            goals=None,
             sample=True,
             normalize_inputs=False,
             normalize_outputs=False,
@@ -959,6 +970,9 @@ class StochasticPolicy(nn.Module):
         if self.context_dim > 0:
             assert context is not None
             h = h + self.context_encoder(context)
+        if self.goals:
+            assert goals is not None
+            h = h + self.goal_encoder(goals)
         h = self.fc(h)
         mu = self.mu_net(h).view(bsize, self.n_outputs)
         logvar = self.logvar_net(h).view(bsize, self.n_outputs)
@@ -988,7 +1002,7 @@ class StochasticPolicy(nn.Module):
 
 
 class DeterministicPolicy(nn.Module):
-    def __init__(self, opt, context_dim=0, output_dim=None, n_channels=4):
+    def __init__(self, opt, context_dim=0, goals=True, output_dim=None, n_channels=4):
         super().__init__()
         self.opt = opt
         self.n_channels = n_channels
@@ -997,6 +1011,7 @@ class DeterministicPolicy(nn.Module):
         self.hsize = opt.nfeature * self.opt.h_height * self.opt.h_width
         self.proj = nn.Linear(self.hsize, opt.n_hidden)
         self.context_dim = context_dim
+        self.goals = goals
 
         self.fc = nn.Sequential(
             nn.Linear(opt.n_hidden, opt.n_hidden),
@@ -1017,11 +1032,21 @@ class DeterministicPolicy(nn.Module):
                 nn.Linear(opt.n_hidden, opt.n_hidden),
             )
 
+        if goals:
+            self.goal_encoder = nn.Sequential(
+                nn.Linear(2, opt.n_hidden),
+                nn.ReLU(),
+                nn.Linear(opt.n_hidden, opt.n_hidden),
+                nn.ReLU(),
+                nn.Linear(opt.n_hidden, opt.n_hidden),
+            )
+
     def forward(
             self,
             state_images,
             states,
             context=None,
+            goals=None,
             sample=True,
             normalize_inputs=False,
             normalize_outputs=False,
@@ -1043,6 +1068,9 @@ class DeterministicPolicy(nn.Module):
         if self.context_dim > 0:
             assert context is not None
             h = h + self.context_encoder(context)
+        if self.goals:
+            assert goals is not None
+            h = h + self.goal_encoder(goals)
         a = self.fc(h).view(bsize, self.n_outputs)
 
         if (

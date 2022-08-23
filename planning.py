@@ -442,14 +442,11 @@ def train_policy_net_mpur(
     # get a list of goals
     goal_list = target_states[:, 0::goal_distance, :2]
     for t in range(npred):
-        import ipdb
-
-        ipdb.set_trace()
         # choose a goal depending on the distance from current position
         current_goal = get_goal(current_position, goal_list)
         actions, _, _, _ = model.policy_net(
-            input_images, input_states
-        )  # TODO: pass goal here
+            input_images, input_states, goals=current_goal
+        )  # pass goal here
         if infer_z:
             h_x = model.encoder(input_images, input_states)
             h_y = model.y_encoder(target_images[:, t].unsqueeze(1).contiguous())
