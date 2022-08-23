@@ -399,7 +399,7 @@ def get_goal(current_position: torch.Tensor, goal_list: torch.Tensor) -> torch.T
     diff = goal_list - cpr
     goals_in_front = [goal_list[batch, diff[batch, :, 0] > 0] for batch in range(bsize)]
     goals_in_front = [
-        goals[0] if goals.nelement != 0 else goal_list[batch, -1, :]
+        goals[0] if goals.nelement() != 0 else goal_list[batch, -1, :]
         for batch, goals in enumerate(goals_in_front)
     ]
     return torch.stack(goals_in_front)
@@ -417,6 +417,7 @@ def train_policy_net_mpur(
     n_updates_z=10,
     infer_z=False,
 ):
+
     input_images_orig, input_states_orig, input_ego_car_orig = inputs
     target_images, target_states, target_costs = targets
     ego_car_new_shape = [*input_images_orig.shape]
@@ -426,8 +427,8 @@ def train_policy_net_mpur(
     input_images = torch.cat((input_images_orig, input_ego_car), dim=2)
     input_states = input_states_orig.clone()
     bsize = input_images.size(0)
-    npred = target_images.size(1)
-    pred_images, pred_states, pred_costs, pred_actions = [], [], [], []
+    npred = target_images.size(1) - 10
+    pred_images, pred_states, pred_costs, pred_actions, current_goals, current_positions = [], [], [], [], [], []
 
     # total_ploss = torch.zeros(1).cuda()
     # Sample latent variables from a (fixed) prior
@@ -461,19 +462,27 @@ def train_policy_net_mpur(
         pred_image, pred_state = model.forward_single_step(
             input_images[:, :, :3].contiguous(), input_states, actions, z_t
         )
-        # TODO: update current position
+
         # Auto regress: enqueue output as new element of the input
         pred_image = torch.cat((pred_image, input_ego_car[:, :1]), dim=2)
         input_images = torch.cat((input_images[:, 1:], pred_image), 1)
         input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
+
         # TODO: record goals here
+        current_positions.append(current_position)
+        current_goals.append(current_goal)
         pred_images.append(pred_image)
         pred_states.append(pred_state)
         pred_actions.append(actions)
 
+        # TODO: update current position
+        current_position = input_states[:, -1, :2]
+
     pred_images = torch.cat(pred_images, 1)
     pred_states = torch.stack(pred_states, 1)
     pred_actions = torch.stack(pred_actions, 1)
+    current_goals = torch.stack(current_goals, 1)
+    current_positions = torch.stack(current_positions, 1)
 
     input_images = input_images_orig.clone()
     input_states = input_states_orig.clone()
@@ -529,7 +538,6 @@ def train_policy_net_mpur(
 
     gamma_mask = torch.tensor([0.99**t for t in range(npred + 1)]).cuda().unsqueeze(0)
     if not hasattr(model, "cost"):
-        # ipdb.set_trace()
         proximity_cost, _ = utils.proximity_cost(
             pred_images[:, :, :3].contiguous(),
             pred_states.data,
