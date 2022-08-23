@@ -14,6 +14,7 @@ eval "$(conda shell.bash hook)"
 conda activate PPUU
 
 python eval_policy.py \
+    -name $name \
     -method policy-MPUR \
     -model_dir models/policy_networks \
     -policy_model $policy \

@@ -233,8 +233,9 @@ for i in range(500):
             opt.model_file + f"step{n_iter}.model",
         )
     if (n_iter / opt.epoch_size) % 20 == 0 and n_iter != 0:
-        pass
+        eval_submit_script = f"sbatch scripts/submit_eval_mpur.slurm policy={opt.model_file}.model name={opt.name}"
         # TODO: eval submit
+        os.system(f"set -k; {eval_submit_script}")
 
     model.to(opt.device)
 
