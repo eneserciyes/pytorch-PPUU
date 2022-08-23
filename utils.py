@@ -496,6 +496,7 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument('-lambda_o', type=float, default=0.0, help='coefficient of offroad cost')
     parser.add_argument('-lambda_g', type=float, default=1.0, help='coefficient of goal cost')
     parser.add_argument('-goal_distance', type=int, default=5, help='goal distance for training')
+    parser.add_argument('-goal_rollout_len', type=int, default=-1, help='goal rollout length, -1 means equal to npred')
     parser.add_argument('-lrt_z', type=float, default=0.0)
     parser.add_argument('-z_updates', type=int, default=0)
     parser.add_argument('-infer_z', action='store_true')

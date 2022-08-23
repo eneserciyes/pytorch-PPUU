@@ -23,7 +23,8 @@ torch.backends.cudnn.benchmark = False
 #################################################
 
 opt = utils.parse_command_line()
-
+if opt.goal_rollout_len == -1:
+    opt.goal_rollout_len = opt.npred
 # Create file_name
 opt.model_file = path.join(opt.model_dir, "policy_networks", "MPUR-" + opt.policy)
 utils.build_model_file_name(opt)
@@ -120,6 +121,7 @@ def start(what, nbatches, npred):
             targets,
             car_sizes,
             goal_distance=opt.goal_distance,
+            goal_rollout_len=opt.goal_rollout_len,
             n_models=10,
             lrt_z=opt.lrt_z,
             n_updates_z=opt.z_updates,

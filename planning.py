@@ -100,7 +100,6 @@ def compute_uncertainty_batch(
         if detach:
             pred_costs.detach_()
     else:
-        # ipdb.set_trace()
         car_sizes_temp = (
             car_sizes.unsqueeze(0)
             .expand(n_models, bsize, 2)
@@ -406,7 +405,7 @@ def get_goal(current_position: torch.Tensor, goal_list: torch.Tensor) -> torch.T
 
 
 def compute_goal_cost(
-    current_positions: torch.Tensor, current_goals: torch.Tensor
+    current_positions: torch.Tensor, current_goals: torch.Tensor, goal_rollout_len: int
 ) -> torch.Tensor:
     """
     current_positions: B x Rollout x 2
@@ -417,7 +416,7 @@ def compute_goal_cost(
     """
     diff = current_goals - current_positions
     goal_cost = torch.linalg.norm(diff, dim=2)
-
+    goal_cost[:, goal_rollout_len:, :] = 0.0  # cut the cost beyond goal rollout len
     return goal_cost
 
 
@@ -427,6 +426,7 @@ def train_policy_net_mpur(
     targets,
     car_sizes,
     goal_distance,
+    goal_rollout_len,
     n_models=10,
     sampling_method="fp",
     lrt_z=0.1,
