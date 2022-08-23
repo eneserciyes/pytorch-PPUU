@@ -128,12 +128,14 @@ def start(what, nbatches, npred):
             infer_z=opt.infer_z,
         )
         pred["policy"] = (
-            pred["proximity"]
+            opt.lambda_p * pred["proximity"]
             + opt.u_reg * pred["uncertainty"]
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
-            + opt.lambda_g * pred["goal"]  # add goal cost here
+            + opt.lambda_g
+            * pred["goal"]
+            * 2  # goal cost is multiplied by 2 to get approx same scale
         )
 
         if not math.isnan(pred["policy"].item()):
@@ -189,7 +191,9 @@ losses = OrderedDict(
 )
 
 # writer = utils.create_tensorboard_writer(opt)
-wandb.init(project="mpur-ppuu")
+run_name = opt.name if opt.name else None
+wandb.init(project="mpur-ppuu", name=run_name)
+wandb.config.update(opt)
 
 for i in range(500):
     train_losses = start("train", opt.epoch_size, opt.npred)
@@ -202,11 +206,6 @@ for i in range(500):
     wandb.log(
         {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
     )
-    # if writer is not None:
-    # for key in train_losses:
-    #     writer.add_scalar(f"Loss/train_{key}", train_losses[key], i)
-    # for key in valid_losses:
-    #     writer.add_scalar(f"Loss/valid_{key}", valid_losses[key], i)
 
     n_iter += opt.epoch_size
     model.to("cpu")
@@ -229,6 +228,9 @@ for i in range(500):
             ),
             opt.model_file + f"step{n_iter}.model",
         )
+    if (n_iter / opt.epoch_size) % 20 == 0 and n_iter != 0:
+        pass
+        # TODO: eval submit
 
     model.to(opt.device)
 
@@ -245,6 +247,3 @@ for i in range(500):
     )
     print(log_string)
     utils.log(opt.model_file + ".log", log_string)
-
-# if writer is not None:
-#     writer.close()
