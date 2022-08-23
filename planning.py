@@ -416,7 +416,9 @@ def compute_goal_cost(
     """
     diff = current_goals - current_positions
     goal_cost = torch.linalg.norm(diff, dim=2)
-    goal_cost[:, goal_rollout_len:, :] = 0.0  # cut the cost beyond goal rollout len
+    goal_rollout_mask = torch.ones_like(goal_cost)
+    goal_rollout_mask[:, goal_rollout_len:] = 0.0
+    goal_cost = goal_cost * goal_rollout_mask  # cut the cost beyond goal rollout len
     return goal_cost
 
 
@@ -593,8 +595,7 @@ def train_policy_net_mpur(
         proximity_cost = pred_costs[:, :, 0]
         lane_cost = pred_costs[:, :, 1]
     # compute goal cost
-    import ipdb
-    ipdb.set_trace()
+
     goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
 
     # if hasattr(model, "value_function"):

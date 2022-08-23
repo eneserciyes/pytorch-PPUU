@@ -3,6 +3,8 @@ import os
 # These environment variables need to be set before
 # import numpy to prevent numpy from spawning a lot of processes
 # which end up clogging up the system.
+import wandb
+
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -69,38 +71,12 @@ def load_models(opt, data_path, device="cuda"):
     if type(forward_model) is dict:
         forward_model = forward_model["model"]
     value_function, policy_network_il, policy_network_mper = None, None, None
-    # model_path = path.join(
-    #     opt.model_dir,
-    #     f'policy_networks/{opt.policy_model}'
-    # )
-    # if opt.value_model != '':
-    #     value_function = torch.load(
-    #         path.join(
-    #             opt.model_dir,
-    #             f'value_functions/{opt.value_model}')
-    #     ).cuda()
-    #     forward_model.value_function = value_function
-    # if opt.method == 'policy-IL':
-    #     policy_network_il = torch.load(model_path).cuda()
-    #     policy_network_il.stats = stats
-    # if opt.method == 'policy-MPER':
-    #     policy_network_mper = torch.load(model_path)['model']
-    #     policy_network_mper.stats = stats
-    #     forward_model.policy_net = policy_network_mper.policy_net
-    #     forward_model.policy_net.stats = stats
-    #     forward_model.policy_net.actor_critic = False
-    # if opt.method == 'policy-MPUR':
-    #     checkpoint = torch.load(model_path)
-    #     policy_network_mpur = checkpoint['model']
-    #     policy_network_mpur.stats = stats
-    #     forward_model.policy_net = policy_network_mpur.policy_net
-    #     forward_model.policy_net.stats = stats
-    #     forward_model.policy_net.actor_critic = False
-    #     forward_model.policy_net.options = checkpoint['opt']
 
     forward_model.intype("gpu")
     forward_model.stats = stats
     if hasattr(forward_model, "policy_net"):
+        if not hasattr(forward_model.policy_net, "goals"):
+            forward_model.policy_net.goals = False
         forward_model.policy_net.stats = {}
         for k, v in stats.items():
             if isinstance(v, torch.Tensor):
@@ -167,6 +143,7 @@ def parse_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         fromfile_prefix_chars="@",
     )
+    parser.add_argument("-name", type=str, default="")
     parser.add_argument("-map", type=str, default="i80", help=" ")
     parser.add_argument("-v", type=str, default="3", help=" ")
     parser.add_argument("-seed", type=int, default=333333, help=" ")
@@ -201,24 +178,24 @@ def parse_args():
     parser.add_argument("-debug", action="store_true", help=" ")
     parser.add_argument("-model_dir", type=str, default="models/", help=" ")
     M1 = (
-            "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-            + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
+        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
+        + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M2 = (
-            "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-            + "beta=1e-06-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
+        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
+        + "beta=1e-06-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M3 = (
-            "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
-            + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
+        "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
+        + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M4 = (
-            "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
-            + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
+        "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
+        + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
     )
     M5 = (
-            "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-            + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step400000.model"
+        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
+        + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step400000.model"
     )
     parser.add_argument("-mfile", type=str, default=M5, help=" ")
     parser.add_argument("-value_model", type=str, default="", help=" ")
@@ -236,7 +213,7 @@ def parse_args():
         type=str,
         default="models/planning_results",
         help="path to the directory where to save tensorboard log."
-             + "If passed empty path no logs are saved.",
+        + "If passed empty path no logs are saved.",
     )
     parser.add_argument(
         "-num_processes",
@@ -264,15 +241,15 @@ def parse_args():
 
 
 def process_one_episode(
-        opt,
-        env,
-        car_path,
-        forward_model,
-        policy_network_il,
-        data_stats,
-        plan_file,
-        index,
-        car_sizes,
+    opt,
+    env,
+    car_path,
+    forward_model,
+    policy_network_il,
+    data_stats,
+    plan_file,
+    index,
+    car_sizes,
 ):
     # import ipdb
     # ipdb.set_trace()
@@ -432,7 +409,7 @@ def process_one_episode(
     if opt.save_grad_vid:
         grads = torch.cat(grad_list)
 
-    if len(images) > 3:
+    if len(images) > 3 and (index % 20) == 0:
         images_3_channels = (images[:, :3] + images[:, 3:]).clamp(max=255)
         utils.save_movie(
             path.join(movie_dir, "ego"),
@@ -480,6 +457,7 @@ def get_scenario_variables(dataloader, splits, j):
 
 
 def main():
+
     opt = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -535,7 +513,9 @@ def main():
     # values saved for later inspection
     action_sequences, state_sequences, cost_sequences = [], [], []
 
-    writer = utils.create_tensorboard_writer(opt)
+    run_name = "eval_" + opt.name if opt.name else None
+    wandb.init(project="mpur-ppuu", name=run_name)
+    wandb.config.update(opt)
 
     n_test = len(splits["test"])
 
@@ -544,13 +524,16 @@ def main():
     time_started = time.time()
     total_images = 0
     if opt.num_processes > 0:
-        set_start_method('spawn')
+        set_start_method("spawn")
         pool = Pool(opt.num_processes)
         for j in range(n_test):
-            car_path, timeslot, car_id, car_sizes = get_scenario_variables(dataloader, splits, j)
+            car_path, timeslot, car_id, car_sizes = get_scenario_variables(
+                dataloader, splits, j
+            )
             async_results.append(
                 pool.apply_async(
-                    process_one_episode, (
+                    process_one_episode,
+                    (
                         opt,
                         env,
                         car_path,
@@ -560,7 +543,7 @@ def main():
                         plan_file,
                         j,
                         car_sizes,
-                    )
+                    ),
                 )
             )
 
@@ -568,7 +551,9 @@ def main():
         if opt.num_processes > 0:
             simulation_result = async_results[j].get()
         else:
-            car_path, timeslot, car_id, car_sizes = get_scenario_variables(dataloader, splits, j)
+            car_path, timeslot, car_id, car_sizes = get_scenario_variables(
+                dataloader, splits, j
+            )
             simulation_result = process_one_episode(
                 opt,
                 env,
@@ -603,18 +588,30 @@ def main():
         print(log_string)
         utils.log(path.join(opt.save_dir, f"{plan_file}.log"), log_string)
 
-        if writer is not None:
-            # writer.add_video(
-            #     f'Video/success={simulation_result.road_completed:d}_{j}',
-            #     simulation_result.images.unsqueeze(0),
-            #     j
-            # )
-            writer.add_scalar("ByEpisode/Success", simulation_result.road_completed, j)
-            writer.add_scalar("ByEpisode/Collision", simulation_result.has_collided, j)
-            writer.add_scalar("ByEpisode/OffScreen", simulation_result.off_screen, j)
-            writer.add_scalar(
-                "ByEpisode/Distance", simulation_result.distance_travelled, j
-            )
+        proximity_cost_mean = numpy.vectorize(
+            lambda a: a["proximity_cost"], otypes=[float]
+        )(simulation_result.cost_sequence).mean()
+        lane_cost_mean = numpy.vectorize(lambda a: a["lane_cost"], otypes=[float])(
+            simulation_result.cost_sequence
+        ).mean()
+        pixel_proximity_cost_mean = numpy.vectorize(
+            lambda a: a["pixel_proximity_cost"], otypes=[float]
+        )(simulation_result.cost_sequence).mean()
+
+        # TODO: add goal cost mean here
+        wandb.log(
+            {
+                "ByEpisode/Success": simulation_result.road_completed,
+                "ByEpisode/Collision": simulation_result.has_collided,
+                "ByEpisode/OffScreen": simulation_result.off_screen,
+                "ByEpisode/Distance": simulation_result.distance_travelled,
+                "ByEpisode/Time": simulation_result.time_travelled,
+                "ByEpisode/ProximityCostMean": proximity_cost_mean,
+                "ByEpisode/LaneCostMean": lane_cost_mean,
+                "ByEpisode/PixelProximityCostMean": pixel_proximity_cost_mean,
+            },
+            step=j,
+        )
     if opt.num_processes > 0:
         pool.close()
         pool.join()
@@ -625,9 +622,6 @@ def main():
     torch.save(action_sequences, path.join(opt.save_dir, f"{plan_file}.actions"))
     torch.save(state_sequences, path.join(opt.save_dir, f"{plan_file}.states"))
     torch.save(cost_sequences, path.join(opt.save_dir, f"{plan_file}.costs"))
-
-    if writer is not None:
-        writer.close()
 
 
 if __name__ == "__main__":
