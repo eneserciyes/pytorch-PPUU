@@ -743,6 +743,7 @@ class Simulator(core.Env):
         gamma=0.99,
         show_frame_count=True,
         store_simulator_video=False,
+        ghost_active=False,
     ):
 
         # Observation spaces definition
@@ -805,6 +806,7 @@ class Simulator(core.Env):
         self.show_frame_count = show_frame_count
         self.ghost = None
         self.store_sim_video = store_simulator_video
+        self.ghost_active = ghost_active
 
     def seed(self, seed=None):
         self.random.seed(seed)

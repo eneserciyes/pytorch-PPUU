@@ -167,6 +167,7 @@ def parse_args():
     parser.add_argument("-bprop_buffer", type=int, default=1, help=" ")
     parser.add_argument("-bprop_save_opt_stats", type=int, default=1, help=" ")
     parser.add_argument("-n_dropout_models", type=int, default=10, help=" ")
+    parser.add_argument("-ghost", action="store_true")
     parser.add_argument("-opt_z", type=int, default=0, help=" ")
     parser.add_argument("-opt_a", type=int, default=1, help=" ")
     parser.add_argument("-u_reg", type=float, default=0.0, help=" ")
@@ -494,6 +495,7 @@ def main():
             nb_states=opt.ncond,
             display=False,
             delta_t=0.1,
+            ghost_active=opt.ghost,
             store_simulator_video=opt.save_sim_video,
             show_frame_count=False,
         ),
