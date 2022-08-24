@@ -865,8 +865,6 @@ class CostPredictor(nn.Module):
     def __init__(self, opt):
         super(CostPredictor, self).__init__()
         self.opt = opt
-        import ipdb
-        ipdb.set_trace()
         self.encoder = encoder(opt, 0, 1)
         self.hsize = opt.nfeature * self.opt.h_height * self.opt.h_width
         self.proj = nn.Linear(self.hsize, opt.n_hidden)

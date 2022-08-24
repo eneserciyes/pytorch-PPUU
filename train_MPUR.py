@@ -196,13 +196,9 @@ wandb.init(project="mpur-ppuu", name=run_name)
 wandb.config.update(opt)
 
 for i in range(500):
-    train_losses = start(
-        "train", opt.epoch_size, opt.npred
-    )
+    train_losses = start("train", opt.epoch_size, opt.npred)
     with torch.no_grad():  # Torch, please please please, do not track computations :)
-        valid_losses = start(
-            "valid", opt.epoch_size // 2, opt.npred
-        )
+        valid_losses = start("valid", opt.epoch_size // 2, opt.npred)
 
     wandb.log(
         {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i

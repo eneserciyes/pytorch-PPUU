@@ -286,7 +286,6 @@ class I80(Simulator):
         return frame
 
     def reset(self, frame=None, time_slot=None, vehicle_id=None, train_only=False):
-
         # train_only = True  # uncomment this if doing RL, to set as default behaviour
         if train_only:
             ################################################################################
@@ -356,7 +355,8 @@ class I80(Simulator):
     #     }
 
     def step(self, policy_action=None):
-
+        import ipdb
+        ipdb.set_trace()
         assert not self.done, 'Trying to step on an exhausted environment!'
 
         if self.normalise_action and policy_action is not None:
