@@ -199,17 +199,18 @@ for i in range(500):
     train_losses = start(
         "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred
     )
-    with torch.no_grad():  # Torch, please please please, do not track computations :)
-        valid_losses = start(
-            "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
-        )
-
     wandb.log(
         {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
     )
-    wandb.log(
-        {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
-    )
+    if (i+1)%5 == 0:
+        with torch.no_grad():  # Torch, please please please, do not track computations :)
+            valid_losses = start(
+                "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
+            )
+        wandb.log(
+            {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
+        )
+    
 
     n_iter += opt.epoch_size
     model.to("cpu")
