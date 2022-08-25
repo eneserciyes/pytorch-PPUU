@@ -512,8 +512,7 @@ def main():
     env_names = {
         "i80": "I-80-v1",
     }
-    import ipdb
-    ipdb.set_trace()
+
     env = gym.make(env_names[opt.map])
     ghost_env = copy.deepcopy(env)
 
