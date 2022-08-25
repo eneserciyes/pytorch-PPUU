@@ -235,7 +235,7 @@ def parse_args():
     opt.h_width = 3
     opt.opt_z = opt.opt_z == 1
     opt.opt_a = opt.opt_a == 1
-
+    opt.goal_distance = 5
     if opt.num_processes == -1:
         opt.num_processes = get_optimal_pool_size()
 
@@ -254,8 +254,7 @@ def process_one_episode(
     index,
     car_sizes,
 ):
-    import ipdb
-    ipdb.set_trace()
+
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
         grad_movie_dir = path.join(
@@ -266,8 +265,10 @@ def process_one_episode(
     # if None => picked at random
     inputs = env.reset(time_slot=timeslot, vehicle_id=car_id)
     _ = ghost_env.reset(time_slot=timeslot, vehicle_id=car_id)
-    for _ in opt.goal_distance:
-        ghost_env.step()
+
+    # give a headstart to ghost for goal distance
+    for _ in range(opt.goal_distance):
+        ghost_env.step(numpy.asarray([0.0, 0.0]))  # dummy action to update ghost
     forward_model.reset_action_buffer(opt.npred)
     done, mu, std = False, None, None
     images, states, costs, actions, mu_list, std_list, grad_list = (
@@ -287,7 +288,7 @@ def process_one_episode(
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        current_goal = torch.tensor(ghost_env.ghost.get_state()[:2])
+        current_goal = ghost_env.ghost.get_state()[:2]
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -298,6 +299,9 @@ def process_one_episode(
                     device="cuda" if torch.cuda.is_available else "cpu",
                 )
             )
+        import ipdb
+
+        ipdb.set_trace()
         if opt.method == "no-action":
             a = numpy.zeros((1, 2))
         elif opt.method == "bprop":
@@ -344,6 +348,7 @@ def process_one_episode(
             a, entropy, mu, std = forward_model.policy_net(
                 input_images.cuda(),
                 input_states.cuda(),
+                goals=current_goal.cuda(),
                 sample=True,
                 normalize_inputs=True,
                 normalize_outputs=True,
@@ -379,6 +384,7 @@ def process_one_episode(
         T = opt.npred if opt.nexec == -1 else opt.nexec
         while (t < T) and not done:
             inputs, cost, done, info = env.step(a[t])
+            _ = ghost_env.step(numpy.asarray([0.0, 0.0]))
             if info.collisions_per_frame > 0:
                 has_collided = True
                 # print(f'[collision after {cntr} frames, ending]')
