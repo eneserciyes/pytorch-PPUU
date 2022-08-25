@@ -585,8 +585,6 @@ class I80(Simulator):
             )
 
         # Keep the ghost updated
-        import ipdb
-        ipdb.set_trace()
         if self.store_sim_video or self.ghost_active:
             if self.ghost and self.ghost.off_screen:
                 self.ghost = None

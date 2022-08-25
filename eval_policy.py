@@ -1,3 +1,4 @@
+import copy
 import os
 
 # These environment variables need to be set before
@@ -244,6 +245,7 @@ def parse_args():
 def process_one_episode(
     opt,
     env,
+    ghost_env,
     car_path,
     forward_model,
     policy_network_il,
@@ -252,8 +254,8 @@ def process_one_episode(
     index,
     car_sizes,
 ):
-    # import ipdb
-    # ipdb.set_trace()
+    import ipdb
+    ipdb.set_trace()
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
         grad_movie_dir = path.join(
@@ -263,6 +265,9 @@ def process_one_episode(
     timeslot, car_id = utils.parse_car_path(car_path)
     # if None => picked at random
     inputs = env.reset(time_slot=timeslot, vehicle_id=car_id)
+    _ = ghost_env.reset(time_slot=timeslot, vehicle_id=car_id)
+    for _ in opt.goal_distance:
+        ghost_env.step()
     forward_model.reset_action_buffer(opt.npred)
     done, mu, std = False, None, None
     images, states, costs, actions, mu_list, std_list, grad_list = (
@@ -275,7 +280,6 @@ def process_one_episode(
         [],
     )
     cntr = 0
-    # inputs, cost, done, info = env.step(numpy.zeros((2,)))
     input_state_t0 = inputs["state"].contiguous()[-1]
     cost_sequence, action_sequence, state_sequence = [], [], []
     has_collided = False
@@ -283,6 +287,7 @@ def process_one_episode(
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
+        current_goal = torch.tensor(ghost_env.ghost.get_state()[:2])
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -329,6 +334,7 @@ def process_one_episode(
             a, entropy, mu, std = forward_model.policy_net(
                 input_images.cuda(),
                 input_states.cuda(),
+                goals=current_goal.cuda(),
                 sample=True,
                 normalize_inputs=True,
                 normalize_outputs=True,
@@ -506,6 +512,7 @@ def main():
         "i80": "I-80-v1",
     }
     env = gym.make(env_names[opt.map])
+    ghost_env = copy.deepcopy(env)
 
     plan_file = build_plan_file_name(opt)
     print(f"[saving to {path.join(opt.save_dir, plan_file)}]")
@@ -538,6 +545,7 @@ def main():
                     (
                         opt,
                         env,
+                        ghost_env,
                         car_path,
                         forward_model,
                         policy_network_il,
@@ -559,6 +567,7 @@ def main():
             simulation_result = process_one_episode(
                 opt,
                 env,
+                ghost_env,
                 car_path,
                 forward_model,
                 policy_network_il,
