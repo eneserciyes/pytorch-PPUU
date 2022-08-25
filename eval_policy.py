@@ -254,7 +254,6 @@ def process_one_episode(
     index,
     car_sizes,
 ):
-
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
         grad_movie_dir = path.join(
@@ -467,7 +466,6 @@ def get_scenario_variables(dataloader, splits, j):
 
 
 def main():
-
     opt = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -514,6 +512,8 @@ def main():
     env_names = {
         "i80": "I-80-v1",
     }
+    import ipdb
+    ipdb.set_trace()
     env = gym.make(env_names[opt.map])
     ghost_env = copy.deepcopy(env)
 
