@@ -384,6 +384,7 @@ def process_one_episode(
         T = opt.npred if opt.nexec == -1 else opt.nexec
         while (t < T) and not done:
             inputs, cost, done, info = env.step(a[t])
+            _ = ghost_env.step(numpy.asarray([0.0, 0.0]))
             if info.collisions_per_frame > 0:
                 has_collided = True
                 # print(f'[collision after {cntr} frames, ending]')
