@@ -196,13 +196,20 @@ wandb.init(project="mpur-ppuu", name=run_name)
 wandb.config.update(opt)
 
 for i in range(500):
+    n_iter += opt.epoch_size
+    log_string = f"step {n_iter} | "
     train_losses = start(
         "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred
     )
     wandb.log(
         {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
     )
-    if (i+1)%5 == 0:
+    log_string += (
+        "train: ["
+        + ", ".join(f"{k}: {train_losses[v]:.4f}" for k, v in losses.items())
+        + "] | "
+    )
+    if (i + 1) % 5 == 0:
         with torch.no_grad():  # Torch, please please please, do not track computations :)
             valid_losses = start(
                 "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
@@ -210,9 +217,15 @@ for i in range(500):
         wandb.log(
             {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
         )
-    
+        log_string += (
+            "valid: ["
+            + ", ".join(f"{k}: {valid_losses[v]:.4f}" for k, v in losses.items())
+            + "]"
+        )
 
-    n_iter += opt.epoch_size
+    print(log_string)
+    utils.log(opt.model_file + ".log", log_string)
+
     model.to("cpu")
     torch.save(
         dict(
@@ -239,17 +252,3 @@ for i in range(500):
         os.system(f"set -k; {eval_submit_script}")
 
     model.to(opt.device)
-
-    log_string = f"step {n_iter} | "
-    log_string += (
-        "train: ["
-        + ", ".join(f"{k}: {train_losses[v]:.4f}" for k, v in losses.items())
-        + "] | "
-    )
-    log_string += (
-        "valid: ["
-        + ", ".join(f"{k}: {valid_losses[v]:.4f}" for k, v in losses.items())
-        + "]"
-    )
-    print(log_string)
-    utils.log(opt.model_file + ".log", log_string)
