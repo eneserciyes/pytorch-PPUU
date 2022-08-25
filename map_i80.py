@@ -587,8 +587,9 @@ class I80(Simulator):
         # Keep the ghost updated
         if self.store_sim_video or self.ghost_active:
             if self.ghost and self.ghost.off_screen:
-                self.ghost = None
-            if self.ghost:
+                # if the ghost is out of the screen, don't update the state anymore 
+                self.ghost_active = False
+            elif self.ghost:
                 self.ghost.step(self.ghost.policy())
 
         for v in self.vehicles:

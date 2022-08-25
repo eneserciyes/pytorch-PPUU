@@ -299,9 +299,6 @@ def process_one_episode(
                     device="cuda" if torch.cuda.is_available else "cpu",
                 )
             )
-        import ipdb
-
-        ipdb.set_trace()
         if opt.method == "no-action":
             a = numpy.zeros((1, 2))
         elif opt.method == "bprop":
@@ -538,6 +535,7 @@ def main():
 
     time_started = time.time()
     total_images = 0
+
     if opt.num_processes > 0:
         set_start_method("spawn")
         pool = Pool(opt.num_processes)

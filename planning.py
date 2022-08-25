@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import numpy
 import utils
-
+import matplotlib.pyplot as plt
 
 ##################################################################################
 # functions for planning and training policy networks using the forward model
@@ -422,6 +422,47 @@ def compute_goal_cost(
     return goal_cost
 
 
+# TODO: visualize goal input to the model
+def visualize_goal_input(
+    input_images: torch.Tensor,
+    input_states: torch.Tensor,
+    current_goal: torch.Tensor,
+    t: int,
+    s_std: torch.Tensor,
+) -> None:
+    """
+    input_images: B x Conditional x 4 x H x W
+    input_states: B x Conditional x 4
+    current_goal: B x 2
+    """
+    # ego image creation
+    images_with_ego = input_images.clone()
+    ego_car = input_images[..., 3:, :, :]
+    images_with_ego[..., 2:3, :, :] += ego_car
+
+    viz_image = images_with_ego[0, -1, :3].permute((1, 2, 0)).detach().cpu()
+
+    # goal in pixels
+    rel_goal = (current_goal - input_states[..., -1, :2]).detach().cpu()
+    unnormalized_rel_goal = rel_goal * s_std[:2]
+    pixel_goal = (
+        (unnormalized_rel_goal * 0.3048 * (24 / 3.7)).round().to(torch.int)
+    )  # goal (feet) * [meter / feet] * [pixel / meter]
+    centre_pixel = torch.tensor(
+        [input_images.size(3) // 2, input_images.size(4) // 2]
+    )  # x: longitudinal, y: latitudinal axis
+    pixel_goal = centre_pixel - pixel_goal
+
+    # plot
+    viz_image[
+        pixel_goal[0, 0] - 1 : pixel_goal[0, 0] + 1,
+        pixel_goal[0, 1] - 1 : pixel_goal[0, 1] + 1,
+        :,
+    ] = torch.ones(1, 3)
+    plt.imshow(viz_image)
+    plt.savefig(f"goal_viz_test_{t}.png")
+
+
 def train_policy_net_mpur(
     model,
     inputs,
@@ -470,6 +511,9 @@ def train_policy_net_mpur(
     for t in range(npred):
         # choose a goal depending on the distance from current position
         current_goal = get_goal(current_position, goal_list)
+        # visualize_goal_input(
+        #     input_images, input_states, current_goal, t, s_std=model.stats["s_std"]
+        # )
         actions, _, _, _ = model.policy_net(
             input_images, input_states, goals=current_goal
         )  # pass goal here
