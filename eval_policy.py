@@ -434,12 +434,12 @@ def process_one_episode(
             utils.save_movie(
                 grad_movie_dir, grads, None, None, None, None, None, pytorch=True
             )
-        if opt.save_sim_video:
-            sim_path = path.join(movie_dir, "sim")
-            print(f"[saving simulator movie to {sim_path}]")
-            os.mkdir(sim_path)
-            for n, img in enumerate(info.frames):
-                imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
+    if opt.save_sim_video:
+        sim_path = path.join(movie_dir, "sim")
+        print(f"[saving simulator movie to {sim_path}]")
+        os.mkdir(sim_path)
+        for n, img in enumerate(info.frames):
+            imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
 
     returned = SimulationResult()
     returned.time_travelled = len(images)

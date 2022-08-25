@@ -540,7 +540,7 @@ class I80(Simulator):
                     self.dump_folder = f"{self._t_slot}_{car.id}"
                     print(f"Creating folder {self.dump_folder}")
                     os.system(f"mkdir -p screen-dumps/{self.dump_folder}")
-                    if self.store_sim_video or self.ghost_active:
+                    if self.ghost_active:
                         self.ghost = self.EnvCar(
                             car_df,
                             self.offset,
@@ -585,7 +585,7 @@ class I80(Simulator):
             )
 
         # Keep the ghost updated
-        if self.store_sim_video or self.ghost_active:
+        if self.ghost_active:
             if self.ghost and self.ghost.off_screen:
                 # if the ghost is out of the screen, don't update the state anymore 
                 self.ghost_active = False
