@@ -689,30 +689,15 @@ def build_model_file_name(opt):
     opt.model_file += f"-name={opt.name}"
     if "vae" in opt.mfile:
         opt.model_file += f"-model=vae"
-    if "zdropout=0.5" in opt.mfile:
-        opt.model_file += "-zdropout=0.5"
-    elif "zdropout=0.0" in opt.mfile:
-        opt.model_file += "-zdropout=0.0"
     if "model=fwd-cnn-layers" in opt.mfile:
         opt.model_file += "-deterministic"
-    opt.model_file += f"-nfeature={opt.nfeature}"
-    opt.model_file += f"-bsize={opt.batch_size}"
-    opt.model_file += f"-npred={opt.npred}"
-    opt.model_file += f"-ureg={opt.u_reg}"
     opt.model_file += f"-lambdal={opt.lambda_l}"
     opt.model_file += f"-lambdap={opt.lambda_p}"
     opt.model_file += f"-lambdag={opt.lambda_g}"
     opt.model_file += f"-goaldist={opt.goal_distance}"
     opt.model_file += f"-goalrollout={opt.goal_rollout_len}"
-    opt.model_file += f"-gamma={opt.gamma}"
-    opt.model_file += f"-lrtz={opt.lrt_z}"
-    opt.model_file += f"-updatez={opt.z_updates}"
-    opt.model_file += f"-inferz={opt.infer_z}"
     opt.model_file += f"-learnedcost={opt.learned_cost}"
     opt.model_file += f"-seed={opt.seed}"
-
-    if opt.value_model == "":
-        opt.model_file += "-novalue"
 
     print(f"[will save as: {opt.model_file}]")
 
