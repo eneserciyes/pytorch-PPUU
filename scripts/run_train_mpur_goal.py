@@ -72,7 +72,7 @@ EXPERIMENTS = [
     },
     # 8
     {
-        "name": "deterministic",
+        "name": "deterministic-rel-goal",
         "lambda_l": 0.2,
         "lambda_p": 1.0,
         "lambda_g": 1.0,
