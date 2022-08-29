@@ -439,12 +439,11 @@ def process_one_episode(
         Path(sim_path).mkdir(parents=True, exist_ok=True)
         for n, img in enumerate(info.frames):
             imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
-        import ipdb
-
-        ipdb.set_trace()
         current_path = os.getcwd()
         os.chdir(sim_path)
-        os.system(f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '\''pad=ceil(iw/2)*2:ceil(ih/2)*2'\'' -r 10 ep{index+1}_sim.mp4 && rm *.png")
+        os.system(
+            f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png"
+        )
         os.chdir(current_path)
 
     returned = SimulationResult()

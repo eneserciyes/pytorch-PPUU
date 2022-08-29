@@ -21,6 +21,6 @@ python3 train_MPUR.py \
     -lamdba_g $lambda_g \
     -goal_distance $goal_distance \
     -goal_rollout_len $goal_rollout_len \
-    -policy 'policy-gauss' \
+    -policy $policy \
     -learned_cost
 
