@@ -264,6 +264,7 @@ def process_one_episode(
     # if None => picked at random
     inputs = env.reset(time_slot=timeslot, vehicle_id=car_id)
     # give a headstart to ghost for goal distance
+    env.ghost.jumping_began = True
     for _ in range(opt.goal_distance + 5):
         env.ghost.step(env.ghost.policy())
     forward_model.reset_action_buffer(opt.npred)
@@ -379,6 +380,15 @@ def process_one_episode(
 
         while (t < T) and not done:
             inputs, cost, done, info = env.step(a[t])
+            # Keep the ghost updated
+            if env.ghost_active:
+                if env.ghost and env.ghost.off_screen:
+                    # if the ghost is out of the screen, don't update the state anymore 
+                    env.ghost_active = False
+                elif env.ghost:
+                    if cntr % opt.goal_distance == 0:
+                        for _ in range(opt.goal_distance):
+                            env.ghost.step(env.ghost.policy())
             if info.collisions_per_frame > 0:
                 has_collided = True
                 # print(f'[collision after {cntr} frames, ending]')

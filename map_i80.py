@@ -550,6 +550,7 @@ class I80(Simulator):
                             self.smoothing_window,
                             dt=self.delta_t,
                         )
+                        self.ghost.jumping_began = False
             self.vehicles_history |= vehicles  # union set operation
 
         self.lane_occupancy = [[] for _ in range(7)]
@@ -587,10 +588,11 @@ class I80(Simulator):
         # Keep the ghost updated
         if self.ghost_active:
             if self.ghost and self.ghost.off_screen:
-                # if the ghost is out of the screen, don't update the state anymore 
+                # if the ghost is out of the screen, don't update the state anymore
                 self.ghost_active = False
             elif self.ghost:
-                self.ghost.step(self.ghost.policy())
+                if not self.ghost.jumping_began:
+                    self.ghost.step(self.ghost.policy())
 
         for v in self.vehicles:
 
@@ -642,8 +644,6 @@ class I80(Simulator):
         # if self.frame == self.accident['frame']:
         #     print('Colliding vehicles:', self.accident['cars'])
         #     self.accident = self.get_next_accident()
-
-
 
         self.frame += int(self.delta_t * 10)
 
