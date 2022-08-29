@@ -977,7 +977,7 @@ class StochasticPolicy(nn.Module):
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
-
+            goals = goals - states[:, -1, :2]
         bsize = state_images.size(0)
 
         h = self.encoder(state_images, states).view(bsize, self.hsize)
@@ -1078,6 +1078,8 @@ class DeterministicPolicy(nn.Module):
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
+            # make the goals relative in normalized space
+            goals = goals - states[:, -1, :2]
 
         bsize = state_images.size(0)
 
