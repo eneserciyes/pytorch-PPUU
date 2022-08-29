@@ -1,5 +1,6 @@
 import copy
 import os
+from pathlib import Path
 
 # These environment variables need to be set before
 # import numpy to prevent numpy from spawning a lot of processes
@@ -168,7 +169,7 @@ def parse_args():
     parser.add_argument("-bprop_buffer", type=int, default=1, help=" ")
     parser.add_argument("-bprop_save_opt_stats", type=int, default=1, help=" ")
     parser.add_argument("-n_dropout_models", type=int, default=10, help=" ")
-    parser.add_argument("-ghost", action="store_true")
+    parser.add_argument("-ghost", default=True, action="store_true")
     parser.add_argument("-opt_z", type=int, default=0, help=" ")
     parser.add_argument("-opt_a", type=int, default=1, help=" ")
     parser.add_argument("-u_reg", type=float, default=0.0, help=" ")
@@ -245,7 +246,6 @@ def parse_args():
 def process_one_episode(
     opt,
     env,
-    ghost_env,
     car_path,
     forward_model,
     policy_network_il,
@@ -263,11 +263,9 @@ def process_one_episode(
     timeslot, car_id = utils.parse_car_path(car_path)
     # if None => picked at random
     inputs = env.reset(time_slot=timeslot, vehicle_id=car_id)
-    _ = ghost_env.reset(time_slot=timeslot, vehicle_id=car_id)
-
     # give a headstart to ghost for goal distance
-    for _ in range(opt.goal_distance):
-        ghost_env.step(numpy.asarray([0.0, 0.0]))  # dummy action to update ghost
+    for _ in range(opt.goal_distance + 5):
+        env.ghost.step(env.ghost.policy())
     forward_model.reset_action_buffer(opt.npred)
     done, mu, std = False, None, None
     images, states, costs, actions, mu_list, std_list, grad_list = (
@@ -287,7 +285,7 @@ def process_one_episode(
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        current_goal = ghost_env.ghost.get_state()[:2]
+        current_goal = env.ghost.get_state()[:2]
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -378,9 +376,9 @@ def process_one_episode(
         cost_test = 0
         t = 0
         T = opt.npred if opt.nexec == -1 else opt.nexec
+
         while (t < T) and not done:
             inputs, cost, done, info = env.step(a[t])
-            _ = ghost_env.step(numpy.asarray([0.0, 0.0]))
             if info.collisions_per_frame > 0:
                 has_collided = True
                 # print(f'[collision after {cntr} frames, ending]')
@@ -418,7 +416,7 @@ def process_one_episode(
     if opt.save_grad_vid:
         grads = torch.cat(grad_list)
 
-    if len(images) > 3 and (index % 20) == 0:
+    if len(images) > 3 and (index % 20) == 0 and False:  # cancelled
         images_3_channels = (images[:, :3] + images[:, 3:]).clamp(max=255)
         utils.save_movie(
             path.join(movie_dir, "ego"),
@@ -437,9 +435,17 @@ def process_one_episode(
     if opt.save_sim_video:
         sim_path = path.join(movie_dir, "sim")
         print(f"[saving simulator movie to {sim_path}]")
-        os.mkdir(sim_path)
+
+        Path(sim_path).mkdir(parents=True, exist_ok=True)
         for n, img in enumerate(info.frames):
             imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
+        import ipdb
+
+        ipdb.set_trace()
+        current_path = os.getcwd()
+        os.chdir(sim_path)
+        os.system(f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '\''pad=ceil(iw/2)*2:ceil(ih/2)*2'\'' -r 10 ep{index+1}_sim.mp4 && rm *.png")
+        os.chdir(current_path)
 
     returned = SimulationResult()
     returned.time_travelled = len(images)
@@ -514,7 +520,6 @@ def main():
     }
 
     env = gym.make(env_names[opt.map])
-    ghost_env = copy.deepcopy(env)
 
     plan_file = build_plan_file_name(opt)
     print(f"[saving to {path.join(opt.save_dir, plan_file)}]")
@@ -548,7 +553,6 @@ def main():
                     (
                         opt,
                         env,
-                        ghost_env,
                         car_path,
                         forward_model,
                         policy_network_il,
@@ -570,7 +574,6 @@ def main():
             simulation_result = process_one_episode(
                 opt,
                 env,
-                ghost_env,
                 car_path,
                 forward_model,
                 policy_network_il,
