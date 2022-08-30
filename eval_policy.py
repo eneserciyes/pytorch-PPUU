@@ -434,7 +434,7 @@ def process_one_episode(
                 grad_movie_dir, grads, None, None, None, None, None, pytorch=True
             )
     if opt.save_sim_video:
-        sim_path = path.join(movie_dir, "sim")
+        sim_path = path.join(movie_dir, "sim")  
         print(f"[saving simulator movie to {sim_path}]")
 
         Path(sim_path).mkdir(parents=True, exist_ok=True)
@@ -448,6 +448,7 @@ def process_one_episode(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
             cwd=os.getcwd(),
+            shell=True,
         )
 
     returned = SimulationResult()
