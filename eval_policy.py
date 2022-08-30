@@ -21,12 +21,25 @@ from os import path
 import planning
 import utils
 from dataloader import DataLoader
-from imageio import imwrite
+import imageio
 import time
+
+from contextlib import (
+    contextmanager,
+    redirect_stderr,
+    redirect_stdout,
+)
 
 from torch.multiprocessing import Pool, set_start_method
 
 torch.multiprocessing.set_sharing_strategy("file_system")
+
+
+@contextmanager
+def suppress_output():
+    with open(os.devnull, "w") as fnull:
+        with redirect_stdout(fnull) as out, redirect_stderr(fnull) as err:
+            yield (err, out)
 
 
 class SimulationResult:
@@ -434,23 +447,16 @@ def process_one_episode(
                 grad_movie_dir, grads, None, None, None, None, None, pytorch=True
             )
     if opt.save_sim_video:
-        sim_path = path.join(movie_dir, "sim")  
+        sim_path = path.join(movie_dir, "sim")
         print(f"[saving simulator movie to {sim_path}]")
 
         Path(sim_path).mkdir(parents=True, exist_ok=True)
-        for n, img in enumerate(info.frames):
-            imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
-        subprocess.check_call(
-            [
-                "conda activate PPUU",
-                f"cd {sim_path}/",
-                f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
-            cwd=os.getcwd(),
-            shell=True,
-        )
+        with suppress_output():
+            writer = imageio.get_writer(path.join(sim_path, f"ep{index + 1}_sim.mp4"))
+            for n, img in enumerate(info.frames):
+                writer.append_data(img)
+            writer.close()
+        print("Video saved")
 
     returned = SimulationResult()
     returned.time_travelled = len(images)
