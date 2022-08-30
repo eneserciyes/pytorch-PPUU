@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import subprocess
+
 # These environment variables need to be set before
 # import numpy to prevent numpy from spawning a lot of processes
 # which end up clogging up the system.
@@ -441,9 +442,11 @@ def process_one_episode(
             imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
         subprocess.check_call(
             [
-                f"cd {sim_path}", 
-                f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png"
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+                f"cd {sim_path}/",
+                f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
         )
 
     returned = SimulationResult()
