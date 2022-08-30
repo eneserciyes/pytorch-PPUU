@@ -447,7 +447,7 @@ def process_one_episode(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
-            pwd=os.getcwd(),
+            cwd=os.getcwd(),
         )
 
     returned = SimulationResult()
