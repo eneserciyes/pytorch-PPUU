@@ -351,11 +351,11 @@ class I80(Simulator):
         file_name = f"traffic-data/xy-trajectories/{time_slot}"
         if isfile(file_name + ".pkl"):
             file_name += ".pkl"
-            print(f"Loading trajectories from {file_name}")
+            # print(f"Loading trajectories from {file_name}")
             df = pd.read_pickle(file_name)
         elif isfile(file_name + ".txt"):
             file_name += ".txt"
-            print(f"Loading trajectories from {file_name}")
+            # print(f"Loading trajectories from {file_name}")
             df = pd.read_csv(
                 file_name,
                 sep=r"\s+",
@@ -455,7 +455,7 @@ class I80(Simulator):
         self.frame = frame - int(self.delta_t * 10)
         self.vehicles_history = set()
         self.dump_folder = "test_dump_replay"
-        print(f"Creating folder {self.dump_folder}")
+        # print(f"Creating folder {self.dump_folder}")
         os.system(f"mkdir -p screen-dumps/{self.dump_folder}")
         # # Account for off-track vehicles
         # with open('off_track.pkl', 'rb') as f:
@@ -538,7 +538,7 @@ class I80(Simulator):
                     car.look_ahead = self.look_ahead
                     # print(f'Controlling car {car.id}')
                     self.dump_folder = f"{self._t_slot}_{car.id}"
-                    print(f"Creating folder {self.dump_folder}")
+                    # print(f"Creating folder {self.dump_folder}")
                     os.system(f"mkdir -p screen-dumps/{self.dump_folder}")
                     if self.ghost_active:
                         self.ghost = self.EnvCar(
@@ -587,7 +587,7 @@ class I80(Simulator):
         # Keep the ghost updated
         if self.ghost_active:
             if self.ghost and self.ghost.off_screen:
-                # if the ghost is out of the screen, don't update the state anymore 
+                # if the ghost is out of the screen, don't update the state anymore
                 self.ghost_active = False
             elif self.ghost:
                 self.ghost.step(self.ghost.policy())
@@ -642,8 +642,6 @@ class I80(Simulator):
         # if self.frame == self.accident['frame']:
         #     print('Colliding vehicles:', self.accident['cars'])
         #     self.accident = self.get_next_accident()
-
-
 
         self.frame += int(self.delta_t * 10)
 
