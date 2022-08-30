@@ -623,8 +623,8 @@ def main():
         wandb.log(
             {
                 "ByEpisode/Success": simulation_result.road_completed,
-                "ByEpisode/Collision": simulation_result.has_collided,
-                "ByEpisode/OffScreen": simulation_result.off_screen,
+                "ByEpisode/Collision": int(simulation_result.has_collided),
+                "ByEpisode/OffScreen": int(simulation_result.off_screen),
                 "ByEpisode/Distance": simulation_result.distance_travelled,
                 "ByEpisode/Time": simulation_result.time_travelled,
                 "ByEpisode/ProximityCostMean": proximity_cost_mean,
