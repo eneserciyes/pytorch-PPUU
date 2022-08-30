@@ -1,7 +1,6 @@
-import copy
 import os
 from pathlib import Path
-
+import subprocess
 # These environment variables need to be set before
 # import numpy to prevent numpy from spawning a lot of processes
 # which end up clogging up the system.
@@ -264,8 +263,9 @@ def process_one_episode(
     # if None => picked at random
     inputs = env.reset(time_slot=timeslot, vehicle_id=car_id)
     # give a headstart to ghost for goal distance
-    for _ in range(opt.goal_distance + 5):
-        env.ghost.step(env.ghost.policy())
+    if env.ghost:
+        for _ in range(opt.goal_distance + 5):
+            env.ghost.step(env.ghost.policy())
     forward_model.reset_action_buffer(opt.npred)
     done, mu, std = False, None, None
     images, states, costs, actions, mu_list, std_list, grad_list = (
@@ -285,7 +285,7 @@ def process_one_episode(
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        current_goal = env.ghost.get_state()[:2]
+        current_goal = env.ghost.get_state()[:2] if env.ghost else None
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -416,7 +416,7 @@ def process_one_episode(
     if opt.save_grad_vid:
         grads = torch.cat(grad_list)
 
-    if len(images) > 3 and (index % 20) == 0 and False:  # cancelled
+    if len(images) > 3 and False:  # cancelled
         images_3_channels = (images[:, :3] + images[:, 3:]).clamp(max=255)
         utils.save_movie(
             path.join(movie_dir, "ego"),
@@ -439,12 +439,12 @@ def process_one_episode(
         Path(sim_path).mkdir(parents=True, exist_ok=True)
         for n, img in enumerate(info.frames):
             imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
-        current_path = os.getcwd()
-        os.chdir(sim_path)
-        os.system(
-            f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png"
+        subprocess.check_call(
+            [
+                f"cd {sim_path}", 
+                f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png"
+            ], stdout=subprocess.DEV_NULL, std_err=subprocess.STDOUT
         )
-        os.chdir(current_path)
 
     returned = SimulationResult()
     returned.time_travelled = len(images)
