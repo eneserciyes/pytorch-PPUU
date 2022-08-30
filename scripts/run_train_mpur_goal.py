@@ -48,7 +48,7 @@ EXPERIMENTS = [
         "lambda_p": 1.0,
         "lambda_g": 1.0,
         "goal_distance": 5,
-        "goal_rollout_len": 10,
+        "goal_rollout_len": 5,
         "policy": "policy-gauss",
     },
     # 6
@@ -82,7 +82,7 @@ EXPERIMENTS = [
     },
 ]
 
-for cfg in EXPERIMENTS[7:8]:
+for cfg in EXPERIMENTS[4:5]:
     sbatch_string = f"sbatch submit_train_mpur_goal.slurm \
     name={cfg['name']} \
     lambda_l={cfg['lambda_l']} \

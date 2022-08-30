@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-#SBATCH --job-name=train_MPUR_goal_$name
-#SBATCH --output=logs/train_MPUR_goal_$name_%j.out
-#SBATCH --error=logs/train_MPUR_goal_$name_%j.err
+#SBATCH --job-name=train_MPUR_goal
+#SBATCH --output=logs/train_MPUR_goal_%j.out
+#SBATCH --error=logs/train_MPUR_goal_%j.err
 #SBATCH --time=32:00:00
 #SBATCH --gres gpu:1
 #SBATCH --account="vita"
