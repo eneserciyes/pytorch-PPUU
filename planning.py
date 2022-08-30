@@ -507,7 +507,7 @@ def train_policy_net_mpur(
     # current position here
     current_position = input_states[:, -1, :2]
     # get a list of goals
-    goal_list = target_states[:, 0::goal_distance, :2]
+    goal_list = target_states[:, goal_distance::goal_distance, :2]
     for t in range(npred):
         # choose a goal depending on the distance from current position
         current_goal = get_goal(current_position, goal_list)
@@ -639,7 +639,9 @@ def train_policy_net_mpur(
         proximity_cost = pred_costs[:, :, 0]
         lane_cost = pred_costs[:, :, 1]
     # compute goal cost
+    import ipdb
 
+    ipdb.set_trace()
     goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
 
     # if hasattr(model, "value_function"):
@@ -652,7 +654,9 @@ def train_policy_net_mpur(
     )  # torch.mean(offroad_cost * gamma_mask[:, :npred])
     proximity_loss = torch.mean(proximity_cost * gamma_mask[:, :npred])
     # computer goal loss with gamma mask
-    goal_loss = torch.mean(goal_cost * gamma_mask[:, :npred])
+    goal_loss = torch.sum(goal_cost * gamma_mask[:, :npred]) / (
+        goal_rollout_len * goal_cost.size(0)
+    )
     _, _, _, _, _, _, total_u_loss = compute_uncertainty_batch(
         model,
         input_images,
