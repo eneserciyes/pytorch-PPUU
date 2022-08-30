@@ -443,7 +443,7 @@ def process_one_episode(
             [
                 f"cd {sim_path}", 
                 f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png"
-            ], stdout=subprocess.DEV_NULL, std_err=subprocess.STDOUT
+            ], stdout=subprocess.DEVNULL, std_err=subprocess.STDOUT
         )
 
     returned = SimulationResult()
