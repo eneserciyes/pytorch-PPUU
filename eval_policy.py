@@ -442,6 +442,7 @@ def process_one_episode(
             imwrite(path.join(sim_path, f"im{n:05d}.png"), img)
         subprocess.check_call(
             [
+                "conda activate PPUU",
                 f"cd {sim_path}/",
                 f"ffmpeg -i im%05d.png -vcodec libx264 -pix_fmt yuv420p -vf '''pad=ceil(iw/2)*2:ceil(ih/2)*2''' -r 10 ep{index+1}_sim.mp4 && rm *.png",
             ],
