@@ -24,7 +24,7 @@ torch.backends.cudnn.benchmark = False
 
 opt = utils.parse_command_line()
 
-if opt.name == "debug":
+if opt.pydevd:
     import pydevd_pycharm
     pydevd_pycharm.settrace('localhost', port=5724, stdoutToServer=True, stderrToServer=True)
 
@@ -200,7 +200,8 @@ run_name = opt.name if opt.name else None
 wandb.init(project="mpur-ppuu", name=run_name)
 wandb.config.update(opt)
 
-for i in range(500):
+best_loss = float("inf")
+for i in range(250):
     n_iter += opt.epoch_size
     log_string = f"step {n_iter} | "
     train_losses = start(
@@ -219,6 +220,19 @@ for i in range(500):
             valid_losses = start(
                 "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
             )
+        if valid_losses["policy"] < best_loss:
+            best_loss = valid_losses["policy"]
+            model.to("cpu")
+            torch.save(
+                dict(
+                    model=model,
+                    optimizer=optimizer.state_dict(),
+                    opt=opt,
+                    n_iter=n_iter,
+                ),
+                opt.model_file + "best.model",
+            )
+
         wandb.log(
             {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
         )
