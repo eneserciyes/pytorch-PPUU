@@ -515,7 +515,7 @@ def train_policy_net_mpur(
         #     input_images, input_states, current_goal, t, s_std=model.stats["s_std"]
         # )
         actions, _, _, _ = model.policy_net(
-            input_images, input_states, goals=current_goal
+            input_images, input_states, goals=(current_goal-current_position)
         )  # pass goal here
         if infer_z:
             h_x = model.encoder(input_images, input_states)
