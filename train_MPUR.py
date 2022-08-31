@@ -23,6 +23,11 @@ torch.backends.cudnn.benchmark = False
 #################################################
 
 opt = utils.parse_command_line()
+
+if opt.name == "debug":
+    import pydevd_pycharm
+    pydevd_pycharm.settrace('localhost', port=5724, stdoutToServer=True, stderrToServer=True)
+
 if opt.goal_rollout_len == -1:
     opt.goal_rollout_len = opt.npred
 # Create file_name

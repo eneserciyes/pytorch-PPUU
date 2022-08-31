@@ -639,9 +639,6 @@ def train_policy_net_mpur(
         proximity_cost = pred_costs[:, :, 0]
         lane_cost = pred_costs[:, :, 1]
     # compute goal cost
-    import ipdb
-
-    ipdb.set_trace()
     goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
 
     # if hasattr(model, "value_function"):
