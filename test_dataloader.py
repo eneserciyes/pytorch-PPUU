@@ -14,7 +14,7 @@ def main(opt):
     # )
     start = time.time()
     dataloader = DataLoader(None, opt, opt.dataset)
-    for i in range(5):
+    for i in range(1):
         print(f"##### BATCH {i} #####")
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(
             "train", opt.npred
