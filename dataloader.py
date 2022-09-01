@@ -2,6 +2,7 @@ import sys
 import numpy, random, pdb, math, pickle, glob, time, os, re
 import torch
 
+
 class DataStore:
     def __init__(self, combined_data_path, car_sizes):
         self.random = random.Random()
@@ -201,7 +202,8 @@ class DataLoader:
         self.random.seed(
             12345
         )  # use this so that the same batches will always be picked
-
+        self.disable_random = random.Random()
+        self.random.seed(12345)  # the random generator for disabling which data store
         if dataset == "i80" or dataset == "us101":
             data_dir = f"traffic-data/state-action-cost/data_{dataset}_v0"
         else:
@@ -222,7 +224,9 @@ class DataLoader:
         for data_store_num, df in enumerate(data_files):
             combined_data_path = f"{data_dir}/{df}/all_data.pth"
             self.data_stores.append(
-                DataStore(combined_data_path, self.car_sizes[data_files[data_store_num]])
+                DataStore(
+                    combined_data_path, self.car_sizes[data_files[data_store_num]]
+                )
             )
 
         self.data_store_sizes = torch.load(data_dir + "/data_store_sizes.pth")
@@ -286,8 +290,7 @@ class DataLoader:
                     if store.populated:
                         active_data_stores.append(i)
                 if len(active_data_stores) >= 2:
-                    disable_store_indx = self.random.choice(active_data_stores)
-                    self.data_stores[disable_store_indx].unpopulate()
+                    self.data_stores[0].unpopulate()
                 self.data_stores[ds].populate()
 
             batch = self.data_stores[ds].get_batch(
