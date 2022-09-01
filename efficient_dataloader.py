@@ -39,11 +39,8 @@ class DataStore:
 
     def get_batch(self, s, device, T, rdm):
         # min is important since sometimes numbers do not align causing issues in stack operation below
-        try:
-            episode_length = min(self.images[s].size(0), self.states[s].size(0))
-        except IndexError:
-            import ipdb
-            ipdb.set_trace()
+        episode_length = min(self.images[s].size(0), self.states[s].size(0))
+
         if episode_length >= T:
             t = rdm.randint(0, episode_length - T)
             image = self.images[s][t : t + T].to(device)
@@ -283,6 +280,8 @@ class DataLoader:
         nb = 0
         T = self.opt.ncond + npred
         while nb < self.opt.batch_size:
+            import ipdb
+            ipdb.set_trace()
             s = self.random.choice(indx)
             ds = find_data_store_by_index(self.data_store_sizes, s)
 
