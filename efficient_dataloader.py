@@ -39,7 +39,11 @@ class DataStore:
 
     def get_batch(self, s, device, T, rdm):
         # min is important since sometimes numbers do not align causing issues in stack operation below
-        episode_length = min(self.images[s].size(0), self.states[s].size(0))
+        try:
+            episode_length = min(self.images[s].size(0), self.states[s].size(0))
+        except IndexError:
+            import ipdb
+            ipdb.set_trace()
         if episode_length >= T:
             t = rdm.randint(0, episode_length - T)
             image = self.images[s][t : t + T].to(device)
