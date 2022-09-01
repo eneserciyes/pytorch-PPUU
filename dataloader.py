@@ -276,6 +276,7 @@ class DataLoader:
         T = self.opt.ncond + npred
         while nb < self.opt.batch_size:
             s = self.random.choice(indx)
+            print("episode:", s)
             ds = find_data_store_by_index(self.data_store_sizes, s)
 
             if not self.data_stores[ds].populated:
