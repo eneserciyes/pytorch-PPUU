@@ -212,9 +212,9 @@ class DataLoader:
 
         if single_shard:
             # quick load for debugging
-            data_files = [f"{next(os.walk(data_dir))[1][0]}"]
+            data_files = [f"{sorted(next(os.walk(data_dir))[1])[0]}"]
         else:
-            data_files = next(os.walk(data_dir))[1]
+            data_files = sorted(next(os.walk(data_dir))[1])
 
         car_sizes_path = data_dir + "/car_sizes.pth"
         print(f"[loading car sizes: {car_sizes_path}]")
