@@ -19,6 +19,7 @@ from ppuu.models import FwdCNN_VAE, CostPredictor
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+
 #################################################
 # Train a policy / controller
 #################################################
@@ -168,6 +169,19 @@ def setup_options():
     return opt
 
 
+def save_checkpoint(name, model, optimizer, opt, n_iter):
+    model.to("cpu")
+    torch.save(
+        dict(
+            model=model.state_dict(),
+            optimizer=optimizer.state_dict(),
+            opt=opt,
+            n_iter=n_iter,
+        ),
+        name,
+    )
+
+
 def main(model, optimizer, dataloader, opt):
     print("[training]")
     utils.log(opt.model_file + ".log", f"[job name: {opt.model_file}]")
@@ -184,7 +198,11 @@ def main(model, optimizer, dataloader, opt):
     )
 
     run_name = opt.name if opt.name else None
-    wandb.init(project="mpur-ppuu", name=run_name)
+    wandb.init(
+        project="mpur-ppuu",
+        name=run_name,
+        mode="offline" if opt.name == "debug" else "online",
+    )
     wandb.config.update(opt)
 
     best_loss = float("inf")
@@ -221,15 +239,8 @@ def main(model, optimizer, dataloader, opt):
                 )
             if valid_losses["policy"] < best_loss:
                 best_loss = valid_losses["policy"]
-                model.to("cpu")
-                torch.save(
-                    dict(
-                        model=model,
-                        optimizer=optimizer.state_dict(),
-                        opt=opt,
-                        n_iter=n_iter,
-                    ),
-                    opt.model_file + "best.model",
+                save_checkpoint(
+                    opt.model_file + "best.model", model, optimizer, opt, n_iter
                 )
 
             wandb.log(
@@ -245,29 +256,12 @@ def main(model, optimizer, dataloader, opt):
         print(log_string)
         utils.log(opt.model_file + ".log", log_string)
 
-        model.to("cpu")
-        torch.save(
-            dict(
-                model=model.state_dict(),
-                optimizer=optimizer.state_dict(),
-                opt=opt,
-                n_iter=n_iter,
-            ),
-            opt.model_file + ".model",
-        )
+        save_checkpoint(opt.model_file + ".model", model, optimizer, opt, n_iter)
+
         if (n_iter / opt.epoch_size) % 20 == 0:
-            torch.save(
-                dict(
-                    model=model.state_dict(),
-                    optimizer=optimizer.state_dict(),
-                    opt=opt,
-                    n_iter=n_iter,
-                ),
-                opt.model_file + f"step{n_iter}.model",
+            save_checkpoint(
+                opt.model_file + f"step{n_iter}.model", model, optimizer, opt, n_iter
             )
-        if (n_iter / opt.epoch_size) % 100 == 0 and n_iter != 0:
-            eval_submit_script = f"sbatch scripts/submit_eval_mpur.slurm policy={opt.model_file}.model name={opt.name}"
-            os.system(f"set -k; {eval_submit_script}")
 
         model.to(opt.device)
 
