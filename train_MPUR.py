@@ -13,7 +13,6 @@ import tqdm
 
 import planning
 import utils
-from dataloader import DataLoader
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -23,6 +22,9 @@ torch.backends.cudnn.benchmark = False
 #################################################
 
 opt = utils.parse_command_line()
+
+if opt.efficient_dataloader:
+    from efficient_dataloader import DataLoader
 
 if opt.pydevd:
     import pydevd_pycharm

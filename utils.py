@@ -661,6 +661,7 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument("-combine", type=str, default="add")
     parser.add_argument("-debug", action="store_true")
     parser.add_argument("-pydevd", action="store_true")
+    parser.add_argument("-efficient_dataloader", action="store_true")
     parser.add_argument("-save_movies", action="store_true")
     parser.add_argument("-l2reg", type=float, default=0.0)
     parser.add_argument("-no_cuda", action="store_true")
