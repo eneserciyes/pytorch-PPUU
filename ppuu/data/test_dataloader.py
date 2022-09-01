@@ -1,10 +1,11 @@
-import utils
 import random
 import numpy
 import torch
-from dataloader import DataLoader
 import time
 from memory_profiler import profile
+
+from ppuu import utils
+from ppuu.data.dataloader import DataLoader
 
 @profile
 def main(opt):

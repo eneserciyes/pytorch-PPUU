@@ -1,17 +1,14 @@
-# from os import getpid, system
+import bisect
+import os
+import pickle
 from os.path import isfile
 
-import torch
-from random import choice, randrange
-
-from custom_graphics import draw_dashed_line
-from traffic_gym import Simulator, Car, colours
-import pygame
-import pandas as pd
 import numpy as np
-import pdb, random
-import bisect
-import pdb, pickle, os, re
+import pandas as pd
+import pygame
+import torch
+
+from ppuu.maps.traffic_gym import Simulator, Car, colours
 
 # Conversion LANE_W from real world to pixels
 # A US highway lane width is 3.7 metres, here 50 pixels
@@ -409,7 +406,7 @@ class I80(Simulator):
                     "/home/atcold/Work/GitHub/pytorch-Traffic-Simulator/train_indx.pkl"
                 )
                 if not os.path.isfile(train_indx_file):
-                    import get_data_idx
+                    pass
                 print("Loading training indices")
                 with open(train_indx_file, "rb") as f:
                     self.train_indx = pickle.load(f)
@@ -484,8 +481,6 @@ class I80(Simulator):
     #     }
 
     def step(self, policy_action=None):
-        # import ipdb
-        # ipdb.set_trace()
         assert not self.done, "Trying to step on an exhausted environment!"
 
         if self.normalise_action and policy_action is not None:

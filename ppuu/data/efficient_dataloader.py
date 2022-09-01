@@ -1,5 +1,10 @@
-import sys
-import numpy, random, pdb, math, pickle, glob, time, os, re
+import glob
+import math
+import numpy
+import os
+import pickle
+import random
+import re
 import torch
 
 
@@ -294,7 +299,10 @@ class DataLoader:
                 self.data_stores[ds].populate()
 
             batch = self.data_stores[ds].get_batch(
-                s if ds == 0 else s - self.data_store_sizes[ds - 1], device, T, self.random
+                s if ds == 0 else s - self.data_store_sizes[ds - 1],
+                device,
+                T,
+                self.random,
             )
             if batch:
                 image, state, action, cost, iD, size, ego_car = batch

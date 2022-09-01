@@ -1,23 +1,19 @@
 import bisect
-
-import pygame, pdb, torch
-import math, numpy
-import random
-import numpy as np
-import scipy.misc
-import sys, pickle
-
-# from skimage import measure, transform
-# from matplotlib.image import imsave
-import PIL
-from PIL import Image
-from custom_graphics import draw_dashed_line, draw_text, draw_rect
-from gym import core, spaces
 import os
+import pickle
+import random
+import sys
+
+import PIL
+import numpy as np
+import pdb
+import pygame
+import torch
+from PIL import Image
+from gym import core, spaces
 from imageio import imwrite
 
-# from skimage.transform import rescale
-
+from ppuu.maps.custom_graphics import draw_dashed_line, draw_text, draw_rect
 
 # Conversion LANE_W from real world to pixels
 # A US highway lane width is 3.7 metres, here 50 pixels
@@ -1160,7 +1156,9 @@ class Simulator(core.Env):
                     # Draw myself blue on the ego_surface
                     ego_rect = v.draw(ego_surface, mode="ego-car", offset=max_extension)
                     # Add me on top of others without shadowing
-                    vehicle_surface.blit(ego_surface, ego_rect, ego_rect, special_flags=pygame.BLEND_MAX)
+                    vehicle_surface.blit(
+                        ego_surface, ego_rect, ego_rect, special_flags=pygame.BLEND_MAX
+                    )
                     v.store(
                         "state_image",
                         (

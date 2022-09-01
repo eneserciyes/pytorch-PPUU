@@ -1,12 +1,16 @@
-from dataloader import DataLoader
 import torch
-from collections import namedtuple
 import pickle
-import utils
+
+from ppuu import utils
+from ppuu.data.dataloader import DataLoader
 
 print('> Loading DataLoader')
+
+
 class opt:
     debug = 0
+
+
 dataloader = DataLoader(None, opt, 'i80')
 
 print('> Loading splits')

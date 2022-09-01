@@ -1,10 +1,9 @@
 # In[1]:
 import pickle
-import ipdb
 import torch
 import time
-from dataloader import DataLoader
-from team_code.tcutils import get_opt, set_seed_and_flags
+from ppuu.data.dataloader import DataLoader
+from ppuu.team_code.tcutils import get_opt, set_seed_and_flags
 
 
 def load_model(mfile):

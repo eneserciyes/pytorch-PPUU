@@ -2,7 +2,7 @@ import argparse
 import numpy
 import gym
 
-from traffic_gym import Simulator
+from ppuu.maps.traffic_gym import Simulator
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-nb_conditions', type=int, default=10)

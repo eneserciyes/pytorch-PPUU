@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import subprocess
 
 # These environment variables need to be set before
 # import numpy to prevent numpy from spawning a lot of processes
@@ -18,9 +17,8 @@ import torch.nn.parallel
 import numpy
 import gym
 from os import path
-import planning
-import utils
-from dataloader import DataLoader
+from ppuu import planning, utils
+from ppuu.data.dataloader import DataLoader
 import imageio
 import time
 

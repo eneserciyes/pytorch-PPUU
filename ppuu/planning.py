@@ -1,9 +1,9 @@
 import torch
 import torch.optim as optim
 import numpy
-import utils
 import matplotlib.pyplot as plt
 
+from ppuu import utils
 ##################################################################################
 # functions for planning and training policy networks using the forward model
 ##################################################################################

@@ -11,9 +11,8 @@ from os import path
 import wandb
 import tqdm
 
-import planning
-import utils
-from dataloader import DataLoader
+from ppuu import planning, utils
+from ppuu.data.dataloader import DataLoader
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False

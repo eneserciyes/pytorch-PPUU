@@ -2,23 +2,22 @@ import argparse
 import glob
 import json
 import math
-import numpy
 import os
 import pdb
-import ipdb
 import re
 import sys
 from datetime import datetime
 from os import path
 
 import matplotlib.pyplot as plt
+import numpy
 import scipy
 import sklearn.manifold as manifold
 import torch
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
 from PIL import Image, ImageDraw
 from sklearn import decomposition
+from torch.utils.tensorboard import SummaryWriter
 
 
 def printnorm(x):

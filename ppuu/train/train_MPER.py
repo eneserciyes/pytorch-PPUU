@@ -1,11 +1,10 @@
-import torch, numpy, argparse, pdb, os, time, math, random, re
-import utils
-from dataloader import DataLoader
+import torch, numpy, argparse, os, math, random
 import torch.nn.functional as F
 import torch.optim as optim
-import models, planning
-import importlib
 import wandb
+
+from ppuu import planning, utils
+from ppuu.data.dataloader import DataLoader
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -76,7 +75,7 @@ parser.add_argument(
 opt = parser.parse_args(
     [
         "--mfile",
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model", # noqa
+        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model",  # noqa
         "--model",
         "fwd-cnn-vae-fp",
         "--layers",

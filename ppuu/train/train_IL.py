@@ -1,10 +1,11 @@
-import torch, numpy, argparse, pdb, os, math
-import utils
-import models
-from dataloader import DataLoader
-import torch.nn.functional as F
+import argparse
+import math
+import os
+import torch
 import torch.optim as optim
 
+from ppuu import utils, models
+from ppuu.data.dataloader import DataLoader
 
 ###########################################
 # Train an imitation learner model
