@@ -1,14 +1,13 @@
 import os
-from pathlib import Path
 
 # These environment variables need to be set before
 # import numpy to prevent numpy from spawning a lot of processes
-# which end up clogging up the system.
-import wandb
-
+# which end up clogging the system.
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
+from pathlib import Path
+import wandb
 import argparse
 import random
 import torch
@@ -17,27 +16,16 @@ import torch.nn.parallel
 import numpy
 import gym
 from os import path
-from ppuu import planning, utils
-from ppuu.data.dataloader import DataLoader
 import imageio
 import time
 
-from contextlib import (
-    contextmanager,
-    redirect_stderr,
-    redirect_stdout,
-)
-
 from torch.multiprocessing import Pool, set_start_method
 
+from ppuu.models import FwdCNN_VAE
+from ppuu import planning, utils
+from ppuu.data.dataloader import DataLoader
+
 torch.multiprocessing.set_sharing_strategy("file_system")
-
-
-@contextmanager
-def suppress_output():
-    with open(os.devnull, "w") as fnull:
-        with redirect_stdout(fnull) as out, redirect_stderr(fnull) as err:
-            yield (err, out)
 
 
 class SimulationResult:
@@ -72,40 +60,29 @@ def get_optimal_pool_size():
 
 
 def load_models(opt, data_path, device="cuda"):
-    stats = torch.load(path.join(data_path, "data_stats.pth"))
+    model = FwdCNN_VAE(opt)
+    model.create_policy_net(opt)
+
     model_path = path.join(opt.model_dir, opt.mfile)
     if path.exists(model_path):
-        forward_model = torch.load(model_path)
-    elif path.exists(opt.mfile):
-        forward_model = torch.load(opt.mfile)
+        checkpoint = torch.load(model_path)
+        model.load_state_dict(state_dict=checkpoint["model"])
     else:
         raise RuntimeError(f"couldn't find file {opt.mfile}")
 
-    if type(forward_model) is dict:
-        forward_model = forward_model["model"]
-    value_function, policy_network_il, policy_network_mper = None, None, None
+    stats = torch.load(path.join(data_path, "data_stats.pth"))
 
-    forward_model.intype("gpu")
-    forward_model.stats = stats
-    if hasattr(forward_model, "policy_net"):
-        if not hasattr(forward_model.policy_net, "goals"):
-            forward_model.policy_net.goals = False
-        forward_model.policy_net.stats = {}
-        for k, v in stats.items():
-            if isinstance(v, torch.Tensor):
-                forward_model.policy_net.stats[k] = v.to(device)
+    model.intype("gpu")
+    model.stats = stats
 
-    # forward_model = forward_model.share_memory()
+    if not hasattr(model.policy_net, "goals"):
+        model.policy_net.goals = False
+    model.policy_net.stats = {}
+    for k, v in stats.items():
+        if isinstance(v, torch.Tensor):
+            model.policy_net.stats[k] = v.to(device)
 
-    if "ten" in opt.mfile:
-        forward_model.p_z = torch.load(path.join(opt.model_dir, f"{opt.mfile}.pz"))
-    return (
-        forward_model,
-        value_function,
-        policy_network_il,
-        policy_network_mper,
-        stats,
-    )
+    return model, stats
 
 
 def build_plan_file_name(opt):
@@ -191,27 +168,7 @@ def parse_args():
     parser.add_argument("-display", type=int, default=0, help=" ")
     parser.add_argument("-debug", action="store_true", help=" ")
     parser.add_argument("-model_dir", type=str, default="models/", help=" ")
-    M1 = (
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-        + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
-    )
-    M2 = (
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-        + "beta=1e-06-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
-    )
-    M3 = (
-        "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
-        + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.0-gclip=5.0-warmstart=1-seed=1.step200000.model"
-    )
-    M4 = (
-        "model=fwd-cnn-ten3-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-nhidden=128-fgeom=1-"
-        + "zeroact=0-zmult=0-dropout=0.1-nz=32-beta=0.0-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step200000.model"
-    )
-    M5 = (
-        "model=fwd-cnn-vae-fp-layers=3-bsize=64-ncond=20-npred=20-lrt=0.0001-nfeature=256-dropout=0.1-nz=32-"
-        + "beta=1e-06-zdropout=0.5-gclip=5.0-warmstart=1-seed=1.step400000.model"
-    )
-    parser.add_argument("-mfile", type=str, default=M5, help=" ")
+    parser.add_argument("-mfile", type=str, help=" ")
     parser.add_argument("-value_model", type=str, default="", help=" ")
     parser.add_argument("-policy_model", type=str, default="", help=" ")
     parser.add_argument(
@@ -259,7 +216,6 @@ def process_one_episode(
     env,
     car_path,
     forward_model,
-    policy_network_il,
     data_stats,
     plan_file,
     index,
@@ -310,37 +266,7 @@ def process_one_episode(
             )
         if opt.method == "no-action":
             a = numpy.zeros((1, 2))
-        elif opt.method == "bprop":
-            # TODO: car size is provided by the dataloader!! This lines below should be removed!
-            # TODO: Namely, dataloader.car_sizes[timeslot][car_id]
-            a = planning.plan_actions_backprop(
-                forward_model,
-                input_images[:, :3, :, :].contiguous(),
-                input_states,
-                car_sizes,
-                npred=opt.npred,
-                n_futures=opt.n_rollouts,
-                normalize=True,
-                bprop_niter=opt.bprop_niter,
-                bprop_lrt=opt.bprop_lrt,
-                u_reg=opt.u_reg,
-                use_action_buffer=(opt.bprop_buffer == 1),
-                n_models=opt.n_dropout_models,
-                save_opt_stats=(opt.bprop_save_opt_stats == 1),
-                nexec=opt.nexec,
-                lambda_l=opt.lambda_l,
-                lambda_o=opt.lambda_o,
-            )
-        elif opt.method == "policy-IL":
-            _, _, _, a = policy_network_il(
-                input_images,
-                input_states,
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=True,
-            )
-            a = a.squeeze().cpu().view(1, 2).numpy()
-        elif opt.method == "policy-MPER":
+        else:
             a, entropy, mu, std = forward_model.policy_net(
                 input_images.cuda(),
                 input_states.cuda(),
@@ -350,42 +276,10 @@ def process_one_episode(
                 normalize_outputs=True,
             )
             a = a.cpu().view(1, 2).numpy()
-        elif opt.method == "policy-MPUR":
-            a, entropy, mu, std = forward_model.policy_net(
-                input_images.cuda(),
-                input_states.cuda(),
-                goals=current_goal.cuda(),
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=True,
-            )
-            a = a.cpu().view(1, 2).numpy()
-        elif opt.method == "bprop+policy-IL":
-            _, _, _, a = policy_network_il(
-                input_images,
-                input_states,
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=False,
-            )
-            a = a[0]
-            a = forward_model.plan_actions_backprop(
-                input_images,
-                input_states,
-                npred=opt.npred,
-                n_futures=opt.n_rollouts,
-                normalize=True,
-                bprop_niter=opt.bprop_niter,
-                bprop_lrt=opt.bprop_lrt,
-                actions=a,
-                u_reg=opt.u_reg,
-                nexec=opt.nexec,
-            )
 
         action_sequence.append(a)
         state_sequence.append(input_states)
         cntr += 1
-        cost_test = 0
         t = 0
         T = opt.npred if opt.nexec == -1 else opt.nexec
 
@@ -393,7 +287,6 @@ def process_one_episode(
             inputs, cost, done, info = env.step(a[t])
             if info.collisions_per_frame > 0:
                 has_collided = True
-                # print(f'[collision after {cntr} frames, ending]')
                 done = True
             off_screen = info.off_screen
 
@@ -415,12 +308,6 @@ def process_one_episode(
             t += 1
     input_state_tfinal = inputs["state"][-1]
 
-    if mu is not None:
-        mu_list = numpy.stack(mu_list)
-        std_list = numpy.stack(std_list)
-    else:
-        mu_list, std_list = None, None
-
     images = torch.stack(images)
     states = torch.stack(states)
     costs = torch.tensor(costs)
@@ -428,32 +315,15 @@ def process_one_episode(
     if opt.save_grad_vid:
         grads = torch.cat(grad_list)
 
-    if len(images) > 3 and False:  # cancelled
-        images_3_channels = (images[:, :3] + images[:, 3:]).clamp(max=255)
-        utils.save_movie(
-            path.join(movie_dir, "ego"),
-            images_3_channels.float() / 255.0,
-            states,
-            costs,
-            actions=actions,
-            mu=mu_list,
-            std=std_list,
-            pytorch=True,
-        )
-        if opt.save_grad_vid:
-            utils.save_movie(
-                grad_movie_dir, grads, None, None, None, None, None, pytorch=True
-            )
     if opt.save_sim_video:
         sim_path = path.join(movie_dir, "sim")
         print(f"[saving simulator movie to {sim_path}]")
 
         Path(sim_path).mkdir(parents=True, exist_ok=True)
-        with suppress_output():
-            writer = imageio.get_writer(path.join(sim_path, f"ep{index + 1}_sim.mp4"))
-            for n, img in enumerate(info.frames):
-                writer.append_data(img)
-            writer.close()
+        writer = imageio.get_writer(path.join(sim_path, f"ep{index + 1}_sim.mp4"))
+        for n, img in enumerate(info.frames):
+            writer.append_data(img)
+        writer.close()
         print("Video saved")
 
     returned = SimulationResult()
@@ -491,23 +361,8 @@ def main():
     data_path = "traffic-data/state-action-cost/data_i80_v0"
 
     dataloader = DataLoader(None, opt, "i80")
-    (
-        forward_model,
-        value_function,
-        policy_network_il,
-        policy_network_mper,
-        data_stats,
-    ) = load_models(opt, data_path, device)
+    model, data_stats = load_models(opt, data_path, device)
     splits = torch.load(path.join(data_path, "splits.pth"))
-
-    if opt.u_reg > 0.0:
-        forward_model.train()
-        forward_model.opt.u_hinge = opt.u_hinge
-        if hasattr(forward_model, "value_function"):
-            forward_model.value_function.train()
-        planning.estimate_uncertainty_stats(
-            forward_model, dataloader, n_batches=50, npred=opt.npred
-        )
 
     gym.envs.registration.register(
         id="I-80-v1",
@@ -539,7 +394,7 @@ def main():
     action_sequences, state_sequences, cost_sequences = [], [], []
 
     run_name = "eval_" + opt.name if opt.name else None
-    wandb.init(project="mpur-ppuu", name=run_name)
+    wandb.init(project="mpur-ppuu", name=run_name, mode="offline")
     wandb.config.update(opt)
 
     n_test = len(splits["test"])
@@ -563,8 +418,7 @@ def main():
                         opt,
                         env,
                         car_path,
-                        forward_model,
-                        policy_network_il,
+                        model,
                         data_stats,
                         plan_file,
                         j,
@@ -584,8 +438,7 @@ def main():
                 opt,
                 env,
                 car_path,
-                forward_model,
-                policy_network_il,
+                model,
                 data_stats,
                 plan_file,
                 j,
