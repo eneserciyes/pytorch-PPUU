@@ -280,8 +280,6 @@ class DataLoader:
         nb = 0
         T = self.opt.ncond + npred
         while nb < self.opt.batch_size:
-            import ipdb
-            ipdb.set_trace()
             s = self.random.choice(indx)
             ds = find_data_store_by_index(self.data_store_sizes, s)
 

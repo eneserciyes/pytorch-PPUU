@@ -184,6 +184,8 @@ def estimate_uncertainty_stats(model, dataloader, n_batches=100, npred=200):
     dataloader.opt.batch_size = 8
     for i in range(n_batches):
         print(f"[estimating normal uncertainty ranges: {i / n_batches:2.1%}]", end="\r")
+        import ipdb
+        ipdb.set_trace()
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(
             "train", npred
         )
