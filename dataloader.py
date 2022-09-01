@@ -18,9 +18,9 @@ class DataLoader:
 
         if single_shard:
             # quick load for debugging
-            data_files = [f'{next(os.walk(data_dir))[1][0]}']
+            data_files = [f'{sorted(next(os.walk(data_dir))[1])[0]}']
         else:
-            data_files = next(os.walk(data_dir))[1]
+            data_files = sorted(next(os.walk(data_dir))[1])
 
         self.images = []
         self.actions = []
