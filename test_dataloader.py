@@ -16,10 +16,15 @@ def main(opt):
     dataloader = DataLoader(None, opt, opt.dataset)
     for i in range(1):
         print(f"##### BATCH {i} #####")
-        inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(
-            "train", opt.npred
-        )
-        print(ids)
+        batch = dataloader.get_batch_fm("train", opt.npred)
+        inputs, actions, targets, ids, car_sizes = batch
+        print("Inputs 0 hash", torch.mean(inputs[0]))
+        print("Inputs 1 hash", torch.mean(inputs[1]))
+        print("Inputs 2 hash", torch.mean(inputs[2]))
+        print("Actions hash", torch.mean(actions))
+        print("Targets 0 hash", torch.mean(targets[0]))
+        print("Targets 1 hash", torch.mean(targets[1]))
+        print("Targets 2 hash", torch.mean(targets[2]))
     print("Took:", time.time() - start)
 
 
