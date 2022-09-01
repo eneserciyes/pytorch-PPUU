@@ -25,6 +25,8 @@ opt = utils.parse_command_line()
 
 if opt.efficient_dataloader:
     from efficient_dataloader import DataLoader
+else:
+    from dataloader import DataLoader
 
 if opt.pydevd:
     import pydevd_pycharm
