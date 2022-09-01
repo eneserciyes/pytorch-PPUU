@@ -37,11 +37,11 @@ class DataStore:
         self.ego_car_images = []
         self.populated = False
 
-    def get_batch(self, s, device, T):
+    def get_batch(self, s, device, T, rdm):
         # min is important since sometimes numbers do not align causing issues in stack operation below
         episode_length = min(self.images[s].size(0), self.states[s].size(0))
         if episode_length >= T:
-            t = self.random.randint(0, episode_length - T)
+            t = rdm.randint(0, episode_length - T)
             image = self.images[s][t : t + T].to(device)
             action = self.actions[s][t : t + T].to(device)
             state = self.states[s][t : t + T, 0].to(
@@ -294,7 +294,7 @@ class DataLoader:
                 self.data_stores[ds].populate()
 
             batch = self.data_stores[ds].get_batch(
-                s if ds == 0 else s - self.data_store_sizes[ds - 1], device, T
+                s if ds == 0 else s - self.data_store_sizes[ds - 1], device, T, self.random
             )
             if batch:
                 image, state, action, cost, iD, size, ego_car = batch
