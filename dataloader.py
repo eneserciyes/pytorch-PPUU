@@ -160,7 +160,6 @@ class DataLoader:
         T = self.opt.ncond + npred
         while nb < self.opt.batch_size:
             s = self.random.choice(indx)
-            print("Episode", s)
             # min is important since sometimes numbers do not align causing issues in stack operation below
             episode_length = min(self.images[s].size(0), self.states[s].size(0))
             if episode_length >= T:
