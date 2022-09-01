@@ -222,7 +222,7 @@ class DataLoader:
         for data_store_num, df in enumerate(data_files):
             combined_data_path = f"{data_dir}/{df}/all_data.pth"
             self.data_stores.append(
-                DataStore(combined_data_path, self.car_sizes[data_store_num])
+                DataStore(combined_data_path, self.car_sizes[data_files[data_store_num]])
             )
 
         self.data_store_sizes = torch.load(data_dir + "/data_store_sizes.pth")
