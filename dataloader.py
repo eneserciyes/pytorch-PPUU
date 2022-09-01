@@ -290,7 +290,7 @@ class DataLoader:
                     if store.populated:
                         active_data_stores.append(i)
                 if len(active_data_stores) >= 2:
-                    self.data_stores[0].unpopulate()
+                    self.data_stores[active_data_stores[0]].unpopulate()
                 self.data_stores[ds].populate()
 
             batch = self.data_stores[ds].get_batch(
