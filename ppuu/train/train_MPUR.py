@@ -11,8 +11,10 @@ from os import path
 import wandb
 import tqdm
 
-from ppuu import planning, utils
+from ppuu import planning
+from ppuu import utils
 from ppuu.data.dataloader import DataLoader
+from ppuu.models import FwdCNN_VAE, CostPredictor
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -21,89 +23,8 @@ torch.backends.cudnn.benchmark = False
 # Train a policy / controller
 #################################################
 
-opt = utils.parse_command_line()
 
-if opt.pydevd:
-    import pydevd_pycharm
-    pydevd_pycharm.settrace('localhost', port=5724, stdoutToServer=True, stderrToServer=True)
-
-if opt.goal_rollout_len == -1:
-    opt.goal_rollout_len = opt.npred
-# Create file_name
-opt.model_file = path.join(opt.model_dir, "policy_networks", "MPUR-" + opt.policy)
-utils.build_model_file_name(opt)
-
-os.system("mkdir -p " + path.join(opt.model_dir, "policy_networks"))
-
-random.seed(opt.seed)
-numpy.random.seed(opt.seed)
-torch.manual_seed(opt.seed)
-
-# Define default device
-opt.device = torch.device(
-    "cuda" if torch.cuda.is_available() and not opt.no_cuda else "cpu"
-)
-if torch.cuda.is_available() and opt.no_cuda:
-    print(
-        "WARNING: You have a CUDA device, so you should probably run without -no_cuda"
-    )
-
-# load the model
-
-model_path = path.join(opt.model_dir, opt.mfile)
-if path.exists(model_path):
-    model = torch.load(model_path)
-elif path.exists(opt.mfile):
-    model = torch.load(opt.mfile)
-else:
-    raise RuntimeError(f"couldn't find file {opt.mfile}")
-
-if not hasattr(model.encoder, "n_channels"):
-    model.encoder.n_channels = 3
-
-if type(model) is dict:
-    model = model["model"]
-model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
-model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
-if opt.value_model != "":
-    value_function = torch.load(
-        path.join(opt.model_dir, "value_functions", opt.value_model)
-    ).to(opt.device)
-    model.value_function = value_function
-
-# Create policy
-model.create_policy_net(opt)
-optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
-
-# Load normalisation stats
-stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
-model.stats = stats  # used by planning.py/compute_uncertainty_batch
-if "ten" in opt.mfile:
-    p_z_file = opt.model_dir + opt.mfile + ".pz"
-    p_z = torch.load(p_z_file)
-    model.p_z = p_z
-
-# Send to GPU if possible
-model.to(opt.device)
-model.policy_net.stats_d = {}
-for k, v in stats.items():
-    if isinstance(v, torch.Tensor):
-        model.policy_net.stats_d[k] = v.to(opt.device)
-
-if opt.learned_cost:
-    print("[loading cost regressor]")
-    model.cost = torch.load(path.join(opt.model_dir, opt.mfile + ".cost.model"))[
-        "model"
-    ]
-
-dataloader = DataLoader(None, opt, opt.dataset)
-model.train()
-model.opt.u_hinge = opt.u_hinge
-planning.estimate_uncertainty_stats(model, dataloader, n_batches=50, npred=opt.npred)
-model.eval()
-
-
-def start(what, nbatches, npred):
+def start(model, dataloader, optimizer, opt, what, nbatches, npred):
     train = True if what == "train" else False
     model.train()
     model.policy_net.train()
@@ -180,92 +101,192 @@ def start(what, nbatches, npred):
     return total_losses
 
 
-print("[training]")
-utils.log(opt.model_file + ".log", f"[job name: {opt.model_file}]")
-utils.log(opt.model_file + ".log", f"Options used: {opt}")
-n_iter = 0
-losses = OrderedDict(
-    p="proximity",
-    l="lane",
-    o="offroad",
-    u="uncertainty",
-    a="action",
-    g="goal",
-    π="policy",
-)
+def setup_model_and_data(opt):
+    # create the model
+    model = FwdCNN_VAE(opt)
+    model.create_policy_net(opt)
+    optimizer = optim.Adam(
+        model.policy_net.parameters(), opt.lrt
+    )  # POLICY optimiser ONLY!
 
-# writer = utils.create_tensorboard_writer(opt)
-run_name = opt.name if opt.name else None
-wandb.init(project="mpur-ppuu", name=run_name)
-wandb.config.update(opt)
+    model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
+    model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
 
-best_loss = float("inf")
-for i in range(250):
-    n_iter += opt.epoch_size
-    log_string = f"step {n_iter} | "
-    train_losses = start(
-        "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred
-    )
-    wandb.log(
-        {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
-    )
-    log_string += (
-        "train: ["
-        + ", ".join(f"{k}: {train_losses[v]:.4f}" for k, v in losses.items())
-        + "] | "
-    )
-    if (i + 1) % 5 == 0:
-        with torch.no_grad():  # Torch, please please please, do not track computations :)
-            valid_losses = start(
-                "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
-            )
-        if valid_losses["policy"] < best_loss:
-            best_loss = valid_losses["policy"]
-            model.to("cpu")
-            torch.save(
-                dict(
-                    model=model,
-                    optimizer=optimizer.state_dict(),
-                    opt=opt,
-                    n_iter=n_iter,
-                ),
-                opt.model_file + "best.model",
-            )
+    # Load normalisation stats
+    stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
+    model.stats = stats  # used by planning.py/compute_uncertainty_batch
 
+    # Send to GPU if possible
+    model.to(opt.device)
+    model.policy_net.stats_d = {}
+    for k, v in stats.items():
+        if isinstance(v, torch.Tensor):
+            model.policy_net.stats_d[k] = v.to(opt.device)
+
+    # load the model
+    model_path = path.join(opt.model_dir, opt.mfile)
+    if path.exists(model_path):
+        checkpoint = torch.load(model_path)
+        model.load_state_dict(state_dict=checkpoint["model"])
+        optimizer.load_state_dict(state_dict=checkpoint["opt"])
+    else:
+        raise RuntimeError(f"couldn't find file {opt.mfile}")
+
+    # if not hasattr(model.encoder, "n_channels"):
+    #     model.encoder.n_channels = 3
+
+    if opt.learned_cost:
+        print("[loading cost regressor]")
+        cost_model = CostPredictor(opt)
+        cost_checkpoint = torch.load(
+            path.join(opt.model_dir, opt.mfile + ".cost.model")
+        )
+        cost_model.load_state_dict(cost_checkpoint["model"])
+        model.cost = cost_model
+
+    dataloader = DataLoader(None, opt, opt.dataset)
+    model.train()
+    model.opt.u_hinge = opt.u_hinge
+    planning.estimate_uncertainty_stats(
+        model, dataloader, n_batches=50, npred=opt.npred
+    )
+    model.eval()
+    return model, optimizer, dataloader
+
+
+def setup_options():
+    opt = utils.parse_command_line()
+
+    # Create file_name
+    opt.model_file = path.join(opt.model_dir, "policy_networks", "MPUR-" + opt.policy)
+    utils.build_model_file_name(opt)
+
+    # Define default device
+    opt.device = torch.device(
+        "cuda" if torch.cuda.is_available() and not opt.no_cuda else "cpu"
+    )
+    return opt
+
+
+def main(model, optimizer, dataloader, opt):
+    print("[training]")
+    utils.log(opt.model_file + ".log", f"[job name: {opt.model_file}]")
+    utils.log(opt.model_file + ".log", f"Options used: {opt}")
+    n_iter = 0
+    losses = OrderedDict(
+        p="proximity",
+        l="lane",
+        o="offroad",
+        u="uncertainty",
+        a="action",
+        g="goal",
+        π="policy",
+    )
+
+    run_name = opt.name if opt.name else None
+    wandb.init(project="mpur-ppuu", name=run_name)
+    wandb.config.update(opt)
+
+    best_loss = float("inf")
+    for i in range(250):
+        n_iter += opt.epoch_size
+        log_string = f"step {n_iter} | "
+        train_losses = start(
+            model,
+            dataloader,
+            optimizer,
+            opt,
+            "train",
+            opt.epoch_size if opt.name != "debug" else 1,
+            opt.npred,
+        )
         wandb.log(
-            {f"Loss/valid_{key}": value for key, value in valid_losses.items()}, step=i
+            {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
         )
         log_string += (
-            "valid: ["
-            + ", ".join(f"{k}: {valid_losses[v]:.4f}" for k, v in losses.items())
-            + "]"
+            "train: ["
+            + ", ".join(f"{k}: {train_losses[v]:.4f}" for k, v in losses.items())
+            + "] | "
         )
+        if (i + 1) % 5 == 0:
+            with torch.no_grad():  # Torch, please please please, do not track computations :)
+                valid_losses = start(
+                    model,
+                    dataloader,
+                    optimizer,
+                    opt,
+                    "valid",
+                    opt.epoch_size // 2 if opt.name != "debug" else 1,
+                    opt.npred,
+                )
+            if valid_losses["policy"] < best_loss:
+                best_loss = valid_losses["policy"]
+                model.to("cpu")
+                torch.save(
+                    dict(
+                        model=model,
+                        optimizer=optimizer.state_dict(),
+                        opt=opt,
+                        n_iter=n_iter,
+                    ),
+                    opt.model_file + "best.model",
+                )
 
-    print(log_string)
-    utils.log(opt.model_file + ".log", log_string)
+            wandb.log(
+                {f"Loss/valid_{key}": value for key, value in valid_losses.items()},
+                step=i,
+            )
+            log_string += (
+                "valid: ["
+                + ", ".join(f"{k}: {valid_losses[v]:.4f}" for k, v in losses.items())
+                + "]"
+            )
 
-    model.to("cpu")
-    torch.save(
-        dict(
-            model=model,
-            optimizer=optimizer.state_dict(),
-            opt=opt,
-            n_iter=n_iter,
-        ),
-        opt.model_file + ".model",
-    )
-    if (n_iter / opt.epoch_size) % 20 == 0:
+        print(log_string)
+        utils.log(opt.model_file + ".log", log_string)
+
+        model.to("cpu")
         torch.save(
             dict(
-                model=model,
+                model=model.state_dict(),
                 optimizer=optimizer.state_dict(),
                 opt=opt,
                 n_iter=n_iter,
             ),
-            opt.model_file + f"step{n_iter}.model",
+            opt.model_file + ".model",
         )
-    if (n_iter / opt.epoch_size) % 100 == 0 and n_iter != 0:
-        eval_submit_script = f"sbatch scripts/submit_eval_mpur.slurm policy={opt.model_file}.model name={opt.name}"
-        os.system(f"set -k; {eval_submit_script}")
+        if (n_iter / opt.epoch_size) % 20 == 0:
+            torch.save(
+                dict(
+                    model=model.state_dict(),
+                    optimizer=optimizer.state_dict(),
+                    opt=opt,
+                    n_iter=n_iter,
+                ),
+                opt.model_file + f"step{n_iter}.model",
+            )
+        if (n_iter / opt.epoch_size) % 100 == 0 and n_iter != 0:
+            eval_submit_script = f"sbatch scripts/submit_eval_mpur.slurm policy={opt.model_file}.model name={opt.name}"
+            os.system(f"set -k; {eval_submit_script}")
 
-    model.to(opt.device)
+        model.to(opt.device)
+
+
+if __name__ == "__main__":
+
+    OPT = setup_options()
+
+    os.system("mkdir -p " + path.join(OPT.model_dir, "policy_networks"))
+    random.seed(OPT.seed)
+    numpy.random.seed(OPT.seed)
+    torch.manual_seed(OPT.seed)
+
+    if OPT.pydevd:
+        import pydevd_pycharm
+
+        pydevd_pycharm.settrace(
+            "localhost", port=5724, stdoutToServer=True, stderrToServer=True
+        )
+
+    MODEL, OPTIMIZER, DATALOADER = setup_model_and_data(OPT)
+    main(MODEL, OPTIMIZER, DATALOADER, OPT)
