@@ -103,12 +103,21 @@ def start(model, dataloader, optimizer, opt, what, nbatches, npred):
 
 
 def setup_model_and_data(opt):
+    model_path = path.join(opt.model_dir, opt.mfile)
+    checkpoint = torch.load(model_path)
+
     # create the model
     model = FwdCNN_VAE(opt)
-    model.create_policy_net(opt)
-    optimizer = optim.Adam(
-        model.policy_net.parameters(), opt.lrt
-    )  # POLICY optimiser ONLY!
+    if "policy_net.encoder.f_encoder.0.weight" in checkpoint["model"].keys():
+        model.create_policy_net(opt)
+        optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)
+        model.load_state_dict(checkpoint["model"])
+        if checkpoint["optimizer"]:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+    else:
+        model.load_state_dict(checkpoint["model"])
+        model.create_policy_net(opt)
+        optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)
 
     model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
     model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
@@ -123,15 +132,6 @@ def setup_model_and_data(opt):
     for k, v in stats.items():
         if isinstance(v, torch.Tensor):
             model.policy_net.stats_d[k] = v.to(opt.device)
-
-    # load the model
-    model_path = path.join(opt.model_dir, opt.mfile)
-    if path.exists(model_path):
-        checkpoint = torch.load(model_path)
-        model.load_state_dict(state_dict=checkpoint["model"])
-        optimizer.load_state_dict(state_dict=checkpoint["opt"])
-    else:
-        raise RuntimeError(f"couldn't find file {opt.mfile}")
 
     # if not hasattr(model.encoder, "n_channels"):
     #     model.encoder.n_channels = 3
@@ -166,6 +166,7 @@ def setup_options():
     opt.device = torch.device(
         "cuda" if torch.cuda.is_available() and not opt.no_cuda else "cpu"
     )
+    opt.nz = 32  # default value for our forward model
     return opt
 
 

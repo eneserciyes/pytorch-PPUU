@@ -21,7 +21,7 @@ import time
 
 from torch.multiprocessing import Pool, set_start_method
 
-from ppuu.models import FwdCNN_VAE
+from ppuu.models import FwdCNN_VAE, CostPredictor
 from ppuu import planning, utils
 from ppuu.data.dataloader import DataLoader
 
@@ -60,15 +60,17 @@ def get_optimal_pool_size():
 
 
 def load_models(opt, data_path, device="cuda"):
-    model = FwdCNN_VAE(opt)
-    model.create_policy_net(opt)
-
     model_path = path.join(opt.model_dir, opt.mfile)
-    if path.exists(model_path):
-        checkpoint = torch.load(model_path)
-        model.load_state_dict(state_dict=checkpoint["model"])
-    else:
-        raise RuntimeError(f"couldn't find file {opt.mfile}")
+    checkpoint = torch.load(model_path)
+
+    if not hasattr(checkpoint["opt"], "nz"):
+        checkpoint["opt"].nz = 32
+
+    model = FwdCNN_VAE(checkpoint["opt"])
+    model.create_policy_net(checkpoint["opt"])
+    model.cost = CostPredictor(checkpoint["opt"])
+
+    model.load_state_dict(state_dict=checkpoint["model"])
 
     stats = torch.load(path.join(data_path, "data_stats.pth"))
 
