@@ -589,6 +589,7 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument("-v", type=int, default=4)
     parser.add_argument("-model", type=str, default="fwd-cnn-vae-fp")
     parser.add_argument("-policy", type=str, default="policy-gauss")
+    parser.add_argument("-goal_policy", type=str, default="policy-gauss")
     parser.add_argument("-model_dir", type=str, default="models/")
     parser.add_argument("-ncond", type=int, default=20)
     parser.add_argument("-npred", type=int, default=30)
@@ -622,6 +623,9 @@ def parse_command_line(parser=None, args=None):
     )
     parser.add_argument(
         "-lambda_p", type=float, default=1.0, help="coefficient of proximity cost"
+    )
+    parser.add_argument(
+        "-lambda_gp", type=float, default=1.0, help="coefficient of goal predictor cost"
     )
     parser.add_argument(
         "-goal_distance", type=int, default=5, help="goal distance for training"

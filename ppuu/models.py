@@ -679,6 +679,9 @@ class FwdCNN_VAE(nn.Module):
         self.z_zero = Variable(torch.zeros(self.opt.batch_size, self.opt.nz))
         self.z_expander = nn.Linear(opt.nz, opt.hidden_size)
 
+        self.goal_policy_net = None
+        self.policy_net = None
+
     def reparameterize(self, mu, logvar, sample):
         if self.training or sample:
             std = logvar.mul(0.5).exp_()
@@ -822,10 +825,12 @@ class FwdCNN_VAE(nn.Module):
             self.policy_net = StochasticPolicy(opt)
         elif opt.policy == "policy-deterministic":
             self.policy_net = DeterministicPolicy(opt)
-        # if opt.policy == "policy-ten":
-        #     self.policy_net = PolicyTEN(opt)
-        # elif opt.policy == "policy-vae":
-        #     self.policy_net = PolicyVAE(opt)
+
+    def create_goal_net(self, opt):
+        if opt.goal_policy == "policy-gauss":
+            self.goal_policy_net = StochasticPolicy(opt, goals=False)
+        elif opt.goal_policy == "policy-deterministic":
+            self.goal_policy_net = DeterministicPolicy(opt, goals=False)
 
     def create_prior_net(self, opt):
         self.prior_net = PriorGaussian(opt, opt.context_dim)
@@ -976,7 +981,8 @@ class StochasticPolicy(nn.Module):
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
-            goals = goals - states[:, -1, :2]
+            if goals is not None:
+                goals = goals - states[:, -1, :2]
         bsize = state_images.size(0)
 
         h = self.encoder(state_images, states).view(bsize, self.hsize)
@@ -1077,8 +1083,9 @@ class DeterministicPolicy(nn.Module):
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
-            # make the goals relative in normalized space
-            goals = goals - states[:, -1, :2]
+            if goals is not None:
+                # make the goals relative in normalized space
+                goals = goals - states[:, -1, :2]
 
         bsize = state_images.size(0)
 

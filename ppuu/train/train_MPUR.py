@@ -38,6 +38,7 @@ def start(model, dataloader, optimizer, opt, what, nbatches, npred):
         action=0,
         policy=0,
         goal=0,
+        goal_predictor=0
     )
     for j in tqdm.tqdm(range(nbatches)):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
@@ -59,9 +60,9 @@ def start(model, dataloader, optimizer, opt, what, nbatches, npred):
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
-            + opt.lambda_g
-            * pred["goal"]
-            * 2  # goal cost is multiplied by 2 to get approx same scale
+            # goal cost is multiplied by 2 to get approx same scale
+            + opt.lambda_g * pred["goal"] * 2
+            + opt.lambda_gp * pred["goal_predictor"]
         )
 
         if not math.isnan(pred["policy"].item()):
@@ -133,9 +134,6 @@ def setup_model_and_data(opt):
         if isinstance(v, torch.Tensor):
             model.policy_net.stats_d[k] = v.to(opt.device)
 
-    # if not hasattr(model.encoder, "n_channels"):
-    #     model.encoder.n_channels = 3
-
     if opt.learned_cost:
         print("[loading cost regressor]")
         cost_model = CostPredictor(opt)
@@ -196,6 +194,7 @@ def main(model, optimizer, dataloader, opt):
         a="action",
         g="goal",
         π="policy",
+        gp="goal_predictor",
     )
 
     run_name = opt.name if opt.name else None
@@ -228,7 +227,7 @@ def main(model, optimizer, dataloader, opt):
             + "] | "
         )
         if (i + 1) % 5 == 0:
-            with torch.no_grad():  # Torch, please please please, do not track computations :)
+            with torch.no_grad():
                 valid_losses = start(
                     model,
                     dataloader,
