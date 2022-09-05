@@ -24,3 +24,4 @@ models
 models/
 wandb/
 .vscode/
+.ipynb_checkpoints/
