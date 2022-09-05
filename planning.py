@@ -509,11 +509,16 @@ def train_policy_net_mpur(
     current_position = input_states[:, -1, :2]
     # get a list of goals
     goal_list = target_states[:, goal_distance::goal_distance, :2]
+    previous_goal = None
     for t in range(npred):
         # choose a goal depending on the distance from current position
         gt_goal = get_goal(current_position, goal_list) - current_position
         if model.goal_policy_net:
-            current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
+            if t % goal_distance == 0:
+                current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
+                previous_goal = current_goal
+            else:
+                current_goal = previous_goal
             goal_predictor_cost = torch.nn.functional.mse_loss(current_goal, gt_goal)
         else:
             current_goal = gt_goal
