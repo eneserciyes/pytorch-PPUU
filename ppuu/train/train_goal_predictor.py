@@ -18,11 +18,11 @@ def setup_model_and_data(opt: argparse.Namespace):
     checkpoint = torch.load(model_path)
 
     # create the model
-    model = FwdCNN_VAE(opt)
-    model.create_policy_net(opt)
+    model = FwdCNN_VAE(checkpoint["opt"])
+    model.create_policy_net(checkpoint["opt"])
     if checkpoint["opt"].learned_cost:
         print("[loading cost regressor]")
-        cost_model = CostPredictor(opt)
+        cost_model = CostPredictor(checkpoint["opt"])
         model.cost = cost_model
 
     if "goal_policy_net.encoder.f_encoder.0.weight" in checkpoint["model"].keys():

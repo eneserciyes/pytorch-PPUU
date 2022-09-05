@@ -38,7 +38,7 @@ def start(model, dataloader, optimizer, opt, what, nbatches, npred):
         action=0,
         policy=0,
         goal=0,
-        goal_predictor=0
+        goal_predictor=0,
     )
     for j in tqdm.tqdm(range(nbatches)):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
@@ -108,7 +108,7 @@ def setup_model_and_data(opt):
     checkpoint = torch.load(model_path)
 
     # create the model
-    model = FwdCNN_VAE(opt)
+    model = FwdCNN_VAE(checkpoint["opt"])
     if "policy_net.encoder.f_encoder.0.weight" in checkpoint["model"].keys():
         model.create_policy_net(opt)
         optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)
@@ -127,21 +127,21 @@ def setup_model_and_data(opt):
     stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
     model.stats = stats  # used by planning.py/compute_uncertainty_batch
 
+    if opt.learned_cost:
+        print("[loading cost regressor]")
+        cost_checkpoint = torch.load(
+            path.join(opt.model_dir, opt.mfile + ".cost.model")
+        )
+        cost_model = CostPredictor(cost_checkpoint["opt"])
+        cost_model.load_state_dict(cost_checkpoint["model"])
+        model.cost = cost_model
+
     # Send to GPU if possible
     model.to(opt.device)
     model.policy_net.stats_d = {}
     for k, v in stats.items():
         if isinstance(v, torch.Tensor):
             model.policy_net.stats_d[k] = v.to(opt.device)
-
-    if opt.learned_cost:
-        print("[loading cost regressor]")
-        cost_model = CostPredictor(opt)
-        cost_checkpoint = torch.load(
-            path.join(opt.model_dir, opt.mfile + ".cost.model")
-        )
-        cost_model.load_state_dict(cost_checkpoint["model"])
-        model.cost = cost_model
 
     dataloader = DataLoader(None, opt, opt.dataset)
     model.train()

@@ -625,7 +625,7 @@ def parse_command_line(parser=None, args=None):
         "-lambda_p", type=float, default=1.0, help="coefficient of proximity cost"
     )
     parser.add_argument(
-        "-lambda_gp", type=float, default=1.0, help="coefficient of goal predictor cost"
+        "-lambda_gp", type=float, default=0.0, help="coefficient of goal predictor cost"
     )
     parser.add_argument(
         "-goal_distance", type=int, default=5, help="goal distance for training"
