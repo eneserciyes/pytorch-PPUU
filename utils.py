@@ -589,7 +589,8 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument("-dataset", type=str, default="i80")
     parser.add_argument("-v", type=int, default=4)
     parser.add_argument("-model", type=str, default="fwd-cnn")
-    parser.add_argument("-policy", type=str, default="policy-deterministic")
+    parser.add_argument("-policy", type=str, default="policy-gauss")
+    parser.add_argument("-goal_policy", type=str, default="policy-gauss")
     parser.add_argument("-model_dir", type=str, default="models/")
     parser.add_argument("-ncond", type=int, default=20)
     parser.add_argument("-npred", type=int, default=30)
@@ -623,6 +624,9 @@ def parse_command_line(parser=None, args=None):
     )
     parser.add_argument(
         "-lambda_p", type=float, default=1.0, help="coefficient of proximity cost"
+    )
+    parser.add_argument(
+        "-lambda_gp", type=float, default=1.0, help="coefficient of goal predictor cost"
     )
     parser.add_argument(
         "-goal_distance", type=int, default=5, help="goal distance for training"
@@ -662,6 +666,7 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument("-debug", action="store_true")
     parser.add_argument("-pydevd", action="store_true")
     parser.add_argument("-efficient_dataloader", action="store_true")
+    parser.add_argument("-train_policy", type=str, default="low_level")
     parser.add_argument("-save_movies", action="store_true")
     parser.add_argument("-l2reg", type=float, default=0.0)
     parser.add_argument("-no_cuda", action="store_true")

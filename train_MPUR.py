@@ -26,7 +26,10 @@ opt = utils.parse_command_line()
 
 if opt.pydevd:
     import pydevd_pycharm
-    pydevd_pycharm.settrace('localhost', port=5724, stdoutToServer=True, stderrToServer=True)
+
+    pydevd_pycharm.settrace(
+        "localhost", port=5724, stdoutToServer=True, stderrToServer=True
+    )
 
 if opt.goal_rollout_len == -1:
     opt.goal_rollout_len = opt.npred
@@ -59,11 +62,12 @@ elif path.exists(opt.mfile):
 else:
     raise RuntimeError(f"couldn't find file {opt.mfile}")
 
+if type(model) is dict:
+    model = model["model"]
+
 if not hasattr(model.encoder, "n_channels"):
     model.encoder.n_channels = 3
 
-if type(model) is dict:
-    model = model["model"]
 model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
 model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
 if opt.value_model != "":
@@ -72,17 +76,18 @@ if opt.value_model != "":
     ).to(opt.device)
     model.value_function = value_function
 
-# Create policy
-model.create_policy_net(opt)
-optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
+if opt.train_policy == "low_level":
+    # Create policy
+    model.create_policy_net(opt)
+    optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
+elif opt.train_policy == "goal":
+    assert model.policy_net, "policy net is not trained"
+    model.create_goal_net(opt)
+    optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
 
 # Load normalisation stats
 stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
 model.stats = stats  # used by planning.py/compute_uncertainty_batch
-if "ten" in opt.mfile:
-    p_z_file = opt.model_dir + opt.mfile + ".pz"
-    p_z = torch.load(p_z_file)
-    model.p_z = p_z
 
 # Send to GPU if possible
 model.to(opt.device)
@@ -91,7 +96,7 @@ for k, v in stats.items():
     if isinstance(v, torch.Tensor):
         model.policy_net.stats_d[k] = v.to(opt.device)
 
-if opt.learned_cost:
+if opt.learned_cost and opt.train_policy == "low_level":
     print("[loading cost regressor]")
     model.cost = torch.load(path.join(opt.model_dir, opt.mfile + ".cost.model"))[
         "model"
@@ -108,6 +113,8 @@ def start(what, nbatches, npred):
     train = True if what == "train" else False
     model.train()
     model.policy_net.train()
+    if model.goal_policy_net:
+        model.goal_policy_net.train()
     n_updates, grad_norm = 0, 0
     total_losses = dict(
         proximity=0,
@@ -117,6 +124,7 @@ def start(what, nbatches, npred):
         action=0,
         policy=0,
         goal=0,
+        goal_predictor=0,
     )
     for j in tqdm.tqdm(range(nbatches)):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
@@ -138,18 +146,19 @@ def start(what, nbatches, npred):
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
-            + opt.lambda_g
-            * pred["goal"]
-            * 2  # goal cost is multiplied by 2 to get approx same scale
+            # goal cost is multiplied by 2 to get approx same scale
+            + opt.lambda_g * pred["goal"] * 2
+            + opt.lambda_gp * pred["goal_predictor"]
         )
 
+        updated_model = model.goal_policy_net if opt.train_policy == 'goal' else model.policy_net
         if not math.isnan(pred["policy"].item()):
             if train:
                 optimizer.zero_grad()
                 pred["policy"].backward()  # back-propagation through time!
-                grad_norm += utils.grad_norm(model.policy_net).item()
+                grad_norm += utils.grad_norm(updated_model).item()
                 torch.nn.utils.clip_grad_norm_(
-                    model.policy_net.parameters(), opt.grad_clip
+                    updated_model.parameters(), opt.grad_clip
                 )
                 optimizer.step()
             for loss in total_losses:
@@ -193,6 +202,7 @@ losses = OrderedDict(
     a="action",
     g="goal",
     π="policy",
+    gp="goal_predictor",
 )
 
 # writer = utils.create_tensorboard_writer(opt)

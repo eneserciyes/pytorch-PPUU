@@ -679,6 +679,8 @@ class FwdCNN_VAE(nn.Module):
 
         self.z_zero = Variable(torch.zeros(self.opt.batch_size, self.opt.nz))
         self.z_expander = nn.Linear(opt.nz, opt.hidden_size)
+        self.policy_net = None
+        self.goal_policy_net = None
 
     def reparameterize(self, mu, logvar, sample):
         if self.training or sample:
@@ -823,10 +825,12 @@ class FwdCNN_VAE(nn.Module):
             self.policy_net = StochasticPolicy(opt)
         elif opt.policy == "policy-deterministic":
             self.policy_net = DeterministicPolicy(opt)
-        # if opt.policy == "policy-ten":
-        #     self.policy_net = PolicyTEN(opt)
-        # elif opt.policy == "policy-vae":
-        #     self.policy_net = PolicyVAE(opt)
+
+    def create_goal_net(self, opt):
+        if opt.goal_policy == "policy-gauss":
+            self.goal_policy_net = StochasticPolicy(opt, goals=False)
+        elif opt.goal_policy == "policy-deterministic":
+            self.goal_policy_net = DeterministicPolicy(opt, goals=False)
 
     def create_prior_net(self, opt):
         self.prior_net = PriorGaussian(opt, opt.context_dim)
