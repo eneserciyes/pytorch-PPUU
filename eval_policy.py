@@ -98,6 +98,8 @@ def load_models(opt, data_path, device="cuda"):
                 forward_model.policy_net.stats[k] = v.to(device)
 
     # forward_model = forward_model.share_memory()
+    if forward_model.goal_policy_net:
+        forward_model.goal_policy_net.stats = forward_model.policy_net.stats
 
     if "ten" in opt.mfile:
         forward_model.p_z = torch.load(path.join(opt.model_dir, f"{opt.mfile}.pz"))
@@ -299,7 +301,16 @@ def process_one_episode(
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        current_goal = env.ghost.get_state()[:2] if env.ghost else None
+        if not forward_model.goal_policy_net:
+            current_goal = env.ghost.get_state()[:2] if env.ghost else None
+        else:
+            current_goal, _, _, _ = forward_model.goal_policy_net(
+                input_images.cuda(),
+                input_states.cuda(),
+                sample=True,
+                normalize_inputs=True,
+                normalize_outputs=False,
+            )
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -360,6 +371,7 @@ def process_one_episode(
                 sample=True,
                 normalize_inputs=True,
                 normalize_outputs=True,
+                normalize_goals=(not forward_model.goal_policy_net),
             )
             a = a.cpu().view(1, 2).numpy()
         elif opt.method == "bprop+policy-IL":

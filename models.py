@@ -967,21 +967,24 @@ class StochasticPolicy(nn.Module):
         sample=True,
         normalize_inputs=False,
         normalize_outputs=False,
+        normalize_goals=False,
         n_samples=1,
         std_mult=1.0,
     ):
-
         if normalize_inputs:
             state_images = state_images.clone().float().div_(255.0)
             states -= self.stats["s_mean"].view(1, 4).expand(states.size())
             states /= self.stats["s_std"].view(1, 4).expand(states.size())
-            if goals is not None:
-                goals -= self.stats["s_mean"][:2]
-                goals /= self.stats["s_std"][:2]
+
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
+
+        if normalize_goals and goals is not None:
+            goals -= self.stats["s_mean"][:2]
+            goals /= self.stats["s_std"][:2]
             goals = goals - states[:, -1, :2]
+
         bsize = state_images.size(0)
 
         h = self.encoder(state_images, states).view(bsize, self.hsize)
