@@ -109,7 +109,7 @@ planning.estimate_uncertainty_stats(model, dataloader, n_batches=50, npred=opt.n
 model.eval()
 
 
-def start(what, nbatches, npred):
+def start(what, nbatches, npred, epoch):
     train = True if what == "train" else False
     model.train()
     model.policy_net.train()
@@ -135,6 +135,7 @@ def start(what, nbatches, npred):
             car_sizes,
             goal_distance=opt.goal_distance,
             goal_rollout_len=opt.goal_rollout_len,
+            index=(epoch * nbatches) + j,
             n_models=10,
             lrt_z=opt.lrt_z,
             n_updates_z=opt.z_updates,
@@ -215,7 +216,7 @@ for i in range(250):
     n_iter += opt.epoch_size
     log_string = f"step {n_iter} | "
     train_losses = start(
-        "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred
+        "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred, i
     )
     wandb.log(
         {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
@@ -228,7 +229,7 @@ for i in range(250):
     if (i + 1) % 5 == 0:
         with torch.no_grad():  # Torch, please please please, do not track computations :)
             valid_losses = start(
-                "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
+                "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred, i
             )
         if valid_losses["policy"] < best_loss:
             best_loss = valid_losses["policy"]

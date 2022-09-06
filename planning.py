@@ -1,6 +1,8 @@
 import torch
 import torch.optim as optim
 import numpy
+import wandb
+
 import utils
 import matplotlib.pyplot as plt
 
@@ -425,9 +427,8 @@ def compute_goal_cost(
 # TODO: visualize goal input to the model
 def visualize_goal_input(
     input_images: torch.Tensor,
-    input_states: torch.Tensor,
     current_goal: torch.Tensor,
-    t: int,
+    index: int,
     s_std: torch.Tensor,
 ) -> None:
     """
@@ -443,7 +444,7 @@ def visualize_goal_input(
     viz_image = images_with_ego[0, -1, :3].permute((1, 2, 0)).detach().cpu()
 
     # goal in pixels
-    rel_goal = (current_goal - input_states[..., -1, :2]).detach().cpu()
+    rel_goal = current_goal.detach().cpu()
     unnormalized_rel_goal = rel_goal * s_std[:2]
     pixel_goal = (
         (unnormalized_rel_goal * 0.3048 * (24 / 3.7)).round().to(torch.int)
@@ -460,7 +461,7 @@ def visualize_goal_input(
         :,
     ] = torch.ones(1, 3)
     plt.imshow(viz_image)
-    plt.savefig(f"goal_viz_test_{t}.png")
+    wandb.log({"goal_viz": plt}, step=index)
 
 
 def train_policy_net_mpur(
@@ -470,6 +471,7 @@ def train_policy_net_mpur(
     car_sizes,
     goal_distance,
     goal_rollout_len,
+    index,
     n_models=10,
     sampling_method="fp",
     lrt_z=0.1,
@@ -514,18 +516,15 @@ def train_policy_net_mpur(
         # choose a goal depending on the distance from current position
         gt_goal = get_goal(current_position, goal_list) - current_position
         if model.goal_policy_net:
-            # if True:
             current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
-            # previous_goal = current_goal
-            # else:
-            #     current_goal = previous_goal
             goal_predictor_cost = torch.nn.functional.mse_loss(current_goal, gt_goal)
         else:
             current_goal = gt_goal
             goal_predictor_cost = torch.tensor(0.).to(gt_goal.device)
-        # visualize_goal_input(
-        #     input_images, input_states, current_goal, t, s_std=model.stats["s_std"]
-        # )
+        if index % 100 == 0 and t == 0:
+            visualize_goal_input(
+                input_images, current_goal, index, s_std=model.stats["s_std"]
+            )
         actions, _, _, _ = model.policy_net(
             input_images, input_states, goals=current_goal
         )  # pass goal here
