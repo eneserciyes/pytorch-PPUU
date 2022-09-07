@@ -184,7 +184,7 @@ def parse_args():
     parser.add_argument("-bprop_buffer", type=int, default=1, help=" ")
     parser.add_argument("-bprop_save_opt_stats", type=int, default=1, help=" ")
     parser.add_argument("-n_dropout_models", type=int, default=10, help=" ")
-    parser.add_argument("-ghost", default=True, action="store_true")
+    parser.add_argument("-ghost", default=False, action="store_true")
     parser.add_argument("-opt_z", type=int, default=0, help=" ")
     parser.add_argument("-opt_a", type=int, default=1, help=" ")
     parser.add_argument("-u_reg", type=float, default=0.0, help=" ")
@@ -242,6 +242,9 @@ def parse_args():
     parser.add_argument(
         "-save_grad_vid", action="store_true", help="save gradients wrt states"
     )
+    parser.add_argument(
+        "-save_ego_movie", action="store_true", help="save ego movie"
+    )
 
     opt = parser.parse_args()
     opt.save_dir = path.join(opt.model_dir, "planning_results")
@@ -284,7 +287,8 @@ def process_one_episode(
             env.ghost.step(env.ghost.policy())
     forward_model.reset_action_buffer(opt.npred)
     done, mu, std = False, None, None
-    images, states, costs, actions, mu_list, std_list, grad_list = (
+    images, states, costs, goals, actions, mu_list, std_list, grad_list = (
+        [],
         [],
         [],
         [],
@@ -423,6 +427,9 @@ def process_one_episode(
                 actions.append(
                     ((torch.tensor(a[t]) - data_stats["a_mean"]) / data_stats["a_std"])
                 )
+                if current_goal is not None:
+                    current_goal_normalized = current_goal.cpu() * data_stats["s_std"][:2]
+                    goals.append(torch.tensor([current_goal_normalized[1], current_goal_normalized[0]]))
                 if mu is not None:
                     mu_list.append(mu.data.cpu().numpy())
                     std_list.append(std.data.cpu().numpy())
@@ -439,16 +446,18 @@ def process_one_episode(
     states = torch.stack(states)
     costs = torch.tensor(costs)
     actions = torch.stack(actions)
+    goals = torch.stack(goals)
     if opt.save_grad_vid:
         grads = torch.cat(grad_list)
 
-    if len(images) > 3 and False:  # cancelled
+    if len(images) > 3 and opt.save_ego_movie:
         images_3_channels = (images[:, :3] + images[:, 3:]).clamp(max=255)
         utils.save_movie(
             path.join(movie_dir, "ego"),
             images_3_channels.float() / 255.0,
             states,
             costs,
+            goals=goals,
             actions=actions,
             mu=mu_list,
             std=std_list,

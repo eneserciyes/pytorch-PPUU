@@ -212,6 +212,12 @@ wandb.init(project="mpur-ppuu", name=run_name)
 wandb.config.update(opt)
 
 best_loss = float("inf")
+# set task costs to 0 at first
+opt.lambda_l = 0.0
+opt.lambda_g = 0.0
+opt.lambda_p = 0.0
+opt.lambda_gp = 1.0
+
 for i in range(250):
     n_iter += opt.epoch_size
     log_string = f"step {n_iter} | "
@@ -281,3 +287,11 @@ for i in range(250):
         os.system(f"set -k; {eval_submit_script}")
 
     model.to(opt.device)
+
+    # set the curriculum
+    if i == 100:
+        opt.lambda_gp = 0.0
+        opt.lambda_l = 0.2
+        opt.lambda_g = 1.0
+        opt.lambda_p = 1.0
+

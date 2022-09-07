@@ -355,6 +355,7 @@ def save_movie(
     states,
     costs=None,
     actions=None,
+    goals=None,
     mu=None,
     std=None,
     pytorch=True,
@@ -408,6 +409,28 @@ def save_movie(
                 ex, ey = 3, 3
             bbox = (x - ex, y - ey, x + ex, y + ey)
             draw.ellipse(bbox, fill=(200, 200, 200))
+        if goals is not None:
+            text += f"g: [{goals[t][0]:.2f}, {goals[t][1]:.2f}]\n"
+            pixel_goal = (
+                (goals * 0.3048 * (24 / 3.7)).round().to(torch.int)
+            )  # goal (feet) * [meter / feet] * [pixel / meter]
+
+            centre_pixel = torch.tensor(
+                [pil.size[0] // 2, pil.size[1] // 2]
+            )  # x: longitudinal, y: latitudinal axis
+            pixel_goal = centre_pixel - 5 * pixel_goal
+            try:
+                draw.ellipse(
+                    (
+                        pixel_goal[0] - 5,
+                        pixel_goal[1] - 5,
+                        pixel_goal[1] + 5,
+                        pixel_goal[1] + 5,
+                    ),
+                    fill=(242, 187, 19),
+                )
+            except SystemError:
+                pass
 
         draw.text((10, 130 * 5 - 10), text, (255, 255, 255))
         pil.save(dirname + f"/im{t:05d}.png")
