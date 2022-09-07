@@ -97,9 +97,7 @@ def train_goal_bc(what, inputs, targets, goal_distance, index):
     input_states = input_states_orig.clone()
     bsize = input_images.size(0)
     npred = target_images.size(1)
-    import ipdb
 
-    ipdb.set_trace()
     # current position here
     current_position = input_states[:, -1, :2]
     # get a list of goals
