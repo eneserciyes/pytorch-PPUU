@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-#SBATCH --job-name=train_bc_goal_predictor_sto
-#SBATCH --output=logs/train_bc_goal_predictor_sto_%j.out
-#SBATCH --error=logs/train_bc_goal_predictor_sto_%j.err
+#SBATCH --job-name=train_bc_goal_predictor_det
+#SBATCH --output=logs/train_bc_goal_predictor_det_%j.out
+#SBATCH --error=logs/train_bc_goal_predictor_det_%j.err
 #SBATCH --time=32:00:00
 #SBATCH --gres gpu:1
 #SBATCH --account="vita"
@@ -16,7 +16,7 @@ conda activate PPUU
 
 cd ../
 python3 train_goal_predictor.py \
-    -name goal_predictor_bc_gauss \
+    -name goal_predictor_bc_deterministic \
     -model_dir models/policy_networks \
     -mfile MPUR-policy-gauss-name=rg_initial_bug_fixed-model=vae-lambdal=0.2-lambdap=1.0-lambdag=1.0-goaldist=5-goalrollout=30-learnedcost=True-seed=1best.model \
     -lambda_l 0.2 \
@@ -26,6 +26,6 @@ python3 train_goal_predictor.py \
     -goal_distance 5 \
     -goal_rollout_len 30 \
     -policy 'policy-gauss' \
-    -goal_policy 'policy-gauss' \
+    -goal_policy 'policy-deterministic' \
     -learned_cost \
     -train_policy 'goal'
