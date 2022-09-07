@@ -178,6 +178,9 @@ def parse_args():
     parser.add_argument("-npred", type=int, default=30, help=" ")
     parser.add_argument("-nexec", type=int, default=1, help=" ")
     parser.add_argument("-n_rollouts", type=int, default=10, help=" ")
+    parser.add_argument(
+        "-n_samples", type=int, default=10, help="samples for online planning"
+    )
     parser.add_argument("-rollout_length", type=int, default=1, help=" ")
     parser.add_argument("-bprop_niter", type=int, default=5, help=" ")
     parser.add_argument("-bprop_lrt", type=float, default=0.1, help=" ")
@@ -242,9 +245,7 @@ def parse_args():
     parser.add_argument(
         "-save_grad_vid", action="store_true", help="save gradients wrt states"
     )
-    parser.add_argument(
-        "-save_ego_movie", action="store_true", help="save ego movie"
-    )
+    parser.add_argument("-save_ego_movie", action="store_true", help="save ego movie")
 
     opt = parser.parse_args()
     opt.save_dir = path.join(opt.model_dir, "planning_results")
@@ -259,6 +260,38 @@ def parse_args():
         opt.num_processes = get_optimal_pool_size()
 
     return opt
+
+
+def guess_and_check(
+    forward_model, input_images, input_states, current_goals, rollout_len
+):
+    costs = []
+    Z = forward_model.sample_z(rollout_len, method="fp")
+    Z = Z.view(1, rollout_len, -1)
+    ego_car_new_shape = [*input_images.shape]
+    ego_car_new_shape[2] = 1
+
+    for current_goal in current_goals:
+        for t in range(rollout_len):
+            z_t = Z[t]
+            a, entropy, mu, std = forward_model.policy_net(
+                input_images.cuda(),
+                input_states.cuda(),
+                goals=current_goal.cuda(),
+                sample=True,
+                normalize_inputs=True,
+                normalize_outputs=True,
+                normalize_goals=(not forward_model.goal_policy_net),
+            )
+            pred_image, pred_state = forward_model.forward_single_step(
+                input_images[:, :, :3].contiguous(), input_states, a, z_t
+            )
+            pred_image = torch.cat((pred_image, input_ego_car[:, :1]), dim=2)
+            input_images = torch.cat((input_images[:, 1:], pred_image), 1)
+            input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
+
+    # TODO: return min cost goal
+    return current_goals[0]
 
 
 def process_one_episode(
@@ -302,103 +335,37 @@ def process_one_episode(
     cost_sequence, action_sequence, state_sequence = [], [], []
     has_collided = False
     off_screen = False
+    forward_model.eval()
     while not done:
+        import ipdb
+
+        ipdb.set_trace()
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        if not forward_model.goal_policy_net:
-            current_goal = env.ghost.get_state()[:2] if env.ghost else None
-        elif forward_model.goal_policy_net and cntr % 5 == 0:
-            current_goal, _, _, _ = forward_model.goal_policy_net(
-                input_images.cuda(),
-                input_states.cuda(),
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=False,
-            )
-        if opt.save_grad_vid:
-            grad_list.append(
-                planning.get_grad_vid(
-                    forward_model,
-                    input_images,
-                    input_states,
-                    car_sizes,
-                    device="cuda" if torch.cuda.is_available else "cpu",
-                )
-            )
-        if opt.method == "no-action":
-            a = numpy.zeros((1, 2))
-        elif opt.method == "bprop":
-            # TODO: car size is provided by the dataloader!! This lines below should be removed!
-            # TODO: Namely, dataloader.car_sizes[timeslot][car_id]
-            a = planning.plan_actions_backprop(
-                forward_model,
-                input_images[:, :3, :, :].contiguous(),
-                input_states,
-                car_sizes,
-                npred=opt.npred,
-                n_futures=opt.n_rollouts,
-                normalize=True,
-                bprop_niter=opt.bprop_niter,
-                bprop_lrt=opt.bprop_lrt,
-                u_reg=opt.u_reg,
-                use_action_buffer=(opt.bprop_buffer == 1),
-                n_models=opt.n_dropout_models,
-                save_opt_stats=(opt.bprop_save_opt_stats == 1),
-                nexec=opt.nexec,
-                lambda_l=opt.lambda_l,
-                lambda_o=opt.lambda_o,
-            )
-        elif opt.method == "policy-IL":
-            _, _, _, a = policy_network_il(
-                input_images,
-                input_states,
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=True,
-            )
-            a = a.squeeze().cpu().view(1, 2).numpy()
-        elif opt.method == "policy-MPER":
-            a, entropy, mu, std = forward_model.policy_net(
-                input_images.cuda(),
-                input_states.cuda(),
-                goals=current_goal.cuda(),
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=True,
-            )
-            a = a.cpu().view(1, 2).numpy()
-        elif opt.method == "policy-MPUR":
-            a, entropy, mu, std = forward_model.policy_net(
-                input_images.cuda(),
-                input_states.cuda(),
-                goals=current_goal.cuda(),
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=True,
-                normalize_goals=(not forward_model.goal_policy_net),
-            )
-            a = a.cpu().view(1, 2).numpy()
-        elif opt.method == "bprop+policy-IL":
-            _, _, _, a = policy_network_il(
-                input_images,
-                input_states,
-                sample=True,
-                normalize_inputs=True,
-                normalize_outputs=False,
-            )
-            a = a[0]
-            a = forward_model.plan_actions_backprop(
-                input_images,
-                input_states,
-                npred=opt.npred,
-                n_futures=opt.n_rollouts,
-                normalize=True,
-                bprop_niter=opt.bprop_niter,
-                bprop_lrt=opt.bprop_lrt,
-                actions=a,
-                u_reg=opt.u_reg,
-                nexec=opt.nexec,
-            )
+
+        current_goals, _, _, _ = forward_model.goal_policy_net(
+            input_images.cuda(),
+            input_states.cuda(),
+            sample=True,
+            n_samples=opt.n_samples,
+            normalize_inputs=True,
+            normalize_outputs=False,
+        )
+
+        current_goal = guess_and_check(
+            forward_model, input_images, input_states, current_goals, rollout_len=5
+        )
+
+        a, entropy, mu, std = forward_model.policy_net(
+            input_images.cuda(),
+            input_states.cuda(),
+            goals=current_goal.cuda(),
+            sample=True,
+            normalize_inputs=True,
+            normalize_outputs=True,
+            normalize_goals=(not forward_model.goal_policy_net),
+        )
+        a = a.cpu().view(1, 2).numpy()
 
         action_sequence.append(a)
         state_sequence.append(input_states)
@@ -428,8 +395,14 @@ def process_one_episode(
                     ((torch.tensor(a[t]) - data_stats["a_mean"]) / data_stats["a_std"])
                 )
                 if current_goal is not None:
-                    current_goal_normalized = current_goal.cpu() * data_stats["s_std"][:2]
-                    goals.append(torch.tensor([current_goal_normalized[1], current_goal_normalized[0]]))
+                    current_goal_normalized = (
+                        current_goal.cpu() * data_stats["s_std"][:2]
+                    )
+                    goals.append(
+                        torch.tensor(
+                            [current_goal_normalized[1], current_goal_normalized[0]]
+                        )
+                    )
                 if mu is not None:
                     mu_list.append(mu.data.cpu().numpy())
                     std_list.append(std.data.cpu().numpy())

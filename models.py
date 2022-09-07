@@ -964,7 +964,7 @@ class StochasticPolicy(nn.Module):
         states,
         context=None,
         goals=None,
-        sample=True,
+        sample=10,
         normalize_inputs=False,
         normalize_outputs=False,
         normalize_goals=False,
