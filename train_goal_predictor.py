@@ -1,15 +1,13 @@
 import math
-from collections import OrderedDict
+import os
+import random
+from os import path
 
 import numpy
-import os
-import ipdb
-import random
 import torch
 import torch.optim as optim
-from os import path
-import wandb
 import tqdm
+import wandb
 
 import planning
 import utils
@@ -67,6 +65,9 @@ assert model.policy_net, "policy net is not trained"
 model.create_goal_net(opt)
 optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
 
+# goal stats
+goal_stats = torch.load("goal_stats.pth").to(opt.device)
+
 # Send to GPU if possible
 model.to(opt.device)
 
@@ -75,6 +76,14 @@ model.train()
 model.opt.u_hinge = opt.u_hinge
 # planning.estimate_uncertainty_stats(model, dataloader, n_batches=50, npred=opt.npred)
 model.eval()
+
+
+def normalize_goal_target(gt_goal):
+    return (gt_goal - goal_stats[0]) / goal_stats[1]
+
+
+def unnormalize_goal(goal_pred):
+    return (goal_pred * goal_stats[1]) + goal_stats[0]
 
 
 def train_goal_bc(what, inputs, targets, goal_distance, index):
@@ -88,15 +97,23 @@ def train_goal_bc(what, inputs, targets, goal_distance, index):
     input_states = input_states_orig.clone()
     bsize = input_images.size(0)
     npred = target_images.size(1)
+    import ipdb
 
+    ipdb.set_trace()
     # current position here
     current_position = input_states[:, -1, :2]
     # get a list of goals
     goal_list = target_states[:, goal_distance::goal_distance, :2]
     gt_goal = planning.get_goal(current_position, goal_list) - current_position
+    normalized_goal_target = normalize_goal_target(gt_goal)
+
     current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
-    goal_predictor_cost = torch.nn.functional.mse_loss(current_goal, gt_goal)
-    if index % 10 == 0:
+    goal_predictor_cost = torch.nn.functional.mse_loss(
+        current_goal, normalized_goal_target
+    )
+    if index % 100 == 0:
+        # unnormalized is still normalized from actual coordinates
+        unnormalized_goal_pred = unnormalize_goal(current_goal)
         planning.visualize_goal_input(
             what, input_images, current_goal, index, s_std=model.stats["s_std"]
         )
@@ -129,37 +146,55 @@ def start(what, nbatches, npred, epoch):
             n_updates += 1
         else:
             print("warning, NaN")
+            import ipdb
+
             ipdb.set_trace()
+        wandb.log(
+            {f"Loss/{what}_goal_prediction": goal_predictor_cost},
+            step=(epoch * nbatches) + j,
+        )
 
     total_loss /= n_updates
     return total_loss
 
 
-print("[training]")
-utils.log(opt.model_file + ".log", f"[job name: {opt.model_file}]")
-utils.log(opt.model_file + ".log", f"Options used: {opt}")
-n_iter = 0
-run_name = opt.name if opt.name else None
-wandb.init(project="mpur-ppuu", name=run_name)
-wandb.config.update(opt)
-
-best_loss = float("inf")
-
-for i in range(250):
-    n_iter += opt.epoch_size
-    train_loss = start(
-        "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred, i
+def main():
+    print("[training]")
+    utils.log(opt.model_file + ".log", f"[job name: {opt.model_file}]")
+    utils.log(opt.model_file + ".log", f"Options used: {opt}")
+    n_iter = 0
+    run_name = opt.name if opt.name else None
+    wandb.init(
+        project="mpur-ppuu",
+        name=run_name,
+        mode="offline" if run_name == "debug" else "online",
     )
-    wandb.log(
-        {f"Loss/train_goal_prediction": train_loss}, step=i
-    )
+    wandb.config.update(opt)
 
-    with torch.no_grad():
-        valid_loss = start(
-            "valid", opt.epoch_size // 5 if opt.name != "debug" else 1, opt.npred, i
+    best_loss = float("inf")
+
+    for i in range(250):
+        n_iter += opt.epoch_size
+        train_loss = start(
+            "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred, i
         )
-    if valid_loss < best_loss:
-        best_loss = valid_loss
+        with torch.no_grad():
+            valid_loss = start(
+                "valid", opt.epoch_size // 5 if opt.name != "debug" else 1, opt.npred, i
+            )
+        if valid_loss < best_loss:
+            best_loss = valid_loss
+            model.to("cpu")
+            torch.save(
+                dict(
+                    model=model,
+                    optimizer=optimizer.state_dict(),
+                    opt=opt,
+                    n_iter=n_iter,
+                ),
+                opt.model_file + "best.model",
+            )
+
         model.to("cpu")
         torch.save(
             dict(
@@ -168,21 +203,11 @@ for i in range(250):
                 opt=opt,
                 n_iter=n_iter,
             ),
-            opt.model_file + "best.model",
+            opt.model_file + ".model",
         )
-    wandb.log(
-        {f"Loss/valid_goal_prediction": valid_loss}, step=i
-    )
 
-    model.to("cpu")
-    torch.save(
-        dict(
-            model=model,
-            optimizer=optimizer.state_dict(),
-            opt=opt,
-            n_iter=n_iter,
-        ),
-        opt.model_file + ".model",
-    )
+        model.to(opt.device)
 
-    model.to(opt.device)
+
+if __name__ == "__main__":
+    main()
