@@ -426,6 +426,7 @@ def compute_goal_cost(
 
 # TODO: visualize goal input to the model
 def visualize_goal_input(
+    what: str,
     input_images: torch.Tensor,
     current_goal: torch.Tensor,
     index: int,
@@ -461,7 +462,7 @@ def visualize_goal_input(
         :,
     ] = torch.ones(1, 3)
     plt.imshow(viz_image)
-    wandb.log({"goal_viz": plt}, step=index)
+    wandb.log({f"{what}/goal_viz": plt}, step=index)
 
 
 def train_policy_net_mpur(
@@ -520,7 +521,7 @@ def train_policy_net_mpur(
             goal_predictor_cost = torch.nn.functional.mse_loss(current_goal, gt_goal)
         else:
             current_goal = gt_goal
-            goal_predictor_cost = torch.tensor(0.).to(gt_goal.device)
+            goal_predictor_cost = torch.tensor(0.0).to(gt_goal.device)
         if index % 100 == 0 and t == 0:
             visualize_goal_input(
                 input_images, current_goal, index, s_std=model.stats["s_std"]

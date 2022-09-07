@@ -393,24 +393,10 @@ def save_movie(
         draw = ImageDraw.Draw(pil)
 
         text = ""
-        if states is not None:
-            text += f"x: [{states[t][0]:.2f}, {states[t][1]:.2f} \n"
-            text += f"dx: {states[t][2]:.2f}, {states[t][3]:.2f}]\n"
-        if costs is not None:
-            text += f"c: [{costs[t][0]:.2f}, {costs[t][1]:.2f}]\n"
-        if actions is not None:
-            text += f"a: [{actions[t][0]:.2f}, {actions[t][1]:.2f}]\n"
-            x = int(images[t].shape[1] * 5 / 2 - mu[t][1] * 30)
-            y = int(images[t].shape[0] * 5 / 2 - mu[t][0] * 30)
-            if std is not None:
-                ex = max(3, int(std[t][1] * 100))
-                ey = max(3, int(std[t][0] * 100))
-            else:
-                ex, ey = 3, 3
-            bbox = (x - ex, y - ey, x + ex, y + ey)
-            draw.ellipse(bbox, fill=(200, 200, 200))
         if goals is not None:
-            text += f"g: [{goals[t][0]:.2f}, {goals[t][1]:.2f}]\n"
+            import ipdb
+            ipdb.set_trace()
+            text += f"g: [{goals[t][1]:.2f}, {goals[t][0]:.2f}]\n"
             pixel_goal = (
                 (goals * 0.3048 * (24 / 3.7)).round().to(torch.int)
             )  # goal (feet) * [meter / feet] * [pixel / meter]
@@ -431,6 +417,22 @@ def save_movie(
                 )
             except SystemError:
                 pass
+        if states is not None:
+            text += f"x: [{states[t][0]:.2f}, {states[t][1]:.2f} \n"
+            text += f"dx: {states[t][2]:.2f}, {states[t][3]:.2f}]\n"
+        if costs is not None:
+            text += f"c: [{costs[t][0]:.2f}, {costs[t][1]:.2f}]\n"
+        if actions is not None:
+            text += f"a: [{actions[t][0]:.2f}, {actions[t][1]:.2f}]\n"
+            x = int(images[t].shape[1] * 5 / 2 - mu[t][1] * 30)
+            y = int(images[t].shape[0] * 5 / 2 - mu[t][0] * 30)
+            if std is not None:
+                ex = max(3, int(std[t][1] * 100))
+                ey = max(3, int(std[t][0] * 100))
+            else:
+                ex, ey = 3, 3
+            bbox = (x - ex, y - ey, x + ex, y + ey)
+            draw.ellipse(bbox, fill=(200, 200, 200))
 
         draw.text((10, 130 * 5 - 10), text, (255, 255, 255))
         pil.save(dirname + f"/im{t:05d}.png")

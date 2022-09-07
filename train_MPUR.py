@@ -31,8 +31,6 @@ if opt.pydevd:
         "localhost", port=5724, stdoutToServer=True, stderrToServer=True
     )
 
-if opt.goal_rollout_len == -1:
-    opt.goal_rollout_len = opt.npred
 # Create file_name
 opt.model_file = path.join(opt.model_dir, "policy_networks", "MPUR-" + opt.policy)
 utils.build_model_file_name(opt)
@@ -292,6 +290,6 @@ for i in range(250):
     if i == 100:
         opt.lambda_gp = 0.0
         opt.lambda_l = 0.2
-        opt.lambda_g = 1.0
+        opt.lambda_g = 0.0
         opt.lambda_p = 1.0
 
