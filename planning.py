@@ -450,11 +450,14 @@ def visualize_goal_input(
     pixel_goal = (
         (unnormalized_rel_goal * 0.3048 * (24 / 3.7)).round().to(torch.int)
     )  # goal (feet) * [meter / feet] * [pixel / meter]
+
     centre_pixel = torch.tensor(
         [input_images.size(3) // 2, input_images.size(4) // 2]
     )  # x: longitudinal, y: latitudinal axis
     pixel_goal = centre_pixel - pixel_goal
 
+    if pixel_goal[0, 0] < 0:
+        return
     # plot
     viz_image[
         pixel_goal[0, 0] - 1 : pixel_goal[0, 0] + 1,
