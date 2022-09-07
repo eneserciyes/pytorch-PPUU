@@ -424,7 +424,6 @@ def compute_goal_cost(
     return goal_cost
 
 
-# TODO: visualize goal input to the model
 def visualize_goal_input(
     what: str,
     input_images: torch.Tensor,

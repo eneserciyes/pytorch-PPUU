@@ -109,7 +109,7 @@ def train_goal_bc(what, inputs, targets, goal_distance, index):
     goal_predictor_cost = torch.nn.functional.mse_loss(
         current_goal, normalized_goal_target
     )
-    if index % 100 == 0:
+    if index % 500 == 0:
         # unnormalized is still normalized from actual coordinates
         unnormalized_goal_pred = unnormalize_goal(current_goal)
         planning.visualize_goal_input(
