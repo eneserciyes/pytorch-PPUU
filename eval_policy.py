@@ -266,18 +266,26 @@ def guess_and_check(
     forward_model, input_images, input_states, current_goals, rollout_len
 ):
     costs = []
+    gamma_mask = (
+        torch.tensor([0.99**t for t in range(rollout_len)]).cuda().unsqueeze(0)
+    )
     Z = forward_model.sample_z(rollout_len, method="fp")
     Z = Z.view(rollout_len, 1, -1)
 
     # normalizations
     input_images = input_images.unsqueeze(0).float().div(255.0).cuda()
     input_states = input_states.unsqueeze(0).cuda()
-    input_states -= forward_model.policy_net.stats["s_mean"].view(1, 4).expand(input_states.size())
-    input_states /= forward_model.policy_net.stats["s_std"].view(1, 4).expand(input_states.size())
+    input_states -= (
+        forward_model.policy_net.stats["s_mean"].view(1, 4).expand(input_states.size())
+    )
+    input_states /= (
+        forward_model.policy_net.stats["s_std"].view(1, 4).expand(input_states.size())
+    )
 
     input_ego_car = input_images[:, -2:-1, -2:-1]
 
     for current_goal in current_goals:
+        pred_images, pred_states = [], []
         for t in range(rollout_len):
             z_t = Z[t]
             a, entropy, mu, std = forward_model.policy_net(
@@ -297,8 +305,27 @@ def guess_and_check(
             input_images = torch.cat((input_images[:, 1:], pred_image), 1)
             input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
+            pred_images.append(pred_image)
+            pred_states.append(pred_state)
+
+        pred_images = torch.cat(pred_images, 1)
+        pred_states = torch.stack(pred_states, 1)
+
+        pred_costs = forward_model.cost(
+            pred_images[:, :, :3].contiguous().view(-1, 3, 117, 24),
+            pred_states.data.view(-1, 4),
+        )
+        pred_costs = pred_costs.view(1, rollout_len, 2)
+        proximity_cost = pred_costs[:, :, 0]
+        lane_cost = pred_costs[:, :, 1]
+        proximity_loss = torch.mean(proximity_cost * gamma_mask)
+        lane_loss = torch.mean(lane_cost * gamma_mask)
+        total_loss = (0.2 * lane_loss) + proximity_loss
+        costs.append(total_loss.item())
+
+    min_cost_goal = min(enumerate(costs), key=lambda x: x[1])[0]
     # TODO: return min cost goal
-    return current_goals[0]
+    return current_goals[min_cost_goal]
 
 
 def process_one_episode(
@@ -354,10 +381,9 @@ def process_one_episode(
             normalize_inputs=True,
             normalize_outputs=False,
         )
+        # unnormalize goal predictions
         current_goals = (current_goals * goal_stats[1]) + goal_stats[0]
-        import ipdb
 
-        ipdb.set_trace()
         current_goal = guess_and_check(
             forward_model, input_images, input_states, current_goals, rollout_len=5
         )
