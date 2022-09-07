@@ -526,7 +526,7 @@ def train_policy_net_mpur(
             goal_predictor_cost = torch.tensor(0.0).to(gt_goal.device)
         if index % 100 == 0 and t == 0:
             visualize_goal_input(
-                input_images, current_goal, index, s_std=model.stats["s_std"]
+                "train", input_images, current_goal, index, s_std=model.stats["s_std"]
             )
         actions, _, _, _ = model.policy_net(
             input_images, input_states, goals=current_goal
@@ -542,6 +542,8 @@ def train_policy_net_mpur(
             z_t = model.reparameterize(mu, logvar, True)
         else:
             z_t = Z[t]
+        import ipdb
+        ipdb.set_trace()
         pred_image, pred_state = model.forward_single_step(
             input_images[:, :, :3].contiguous(), input_states, actions, z_t
         )

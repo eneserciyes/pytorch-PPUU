@@ -267,26 +267,33 @@ def guess_and_check(
 ):
     costs = []
     Z = forward_model.sample_z(rollout_len, method="fp")
-    Z = Z.view(1, rollout_len, -1)
-    ego_car_new_shape = [*input_images.shape]
-    ego_car_new_shape[2] = 1
+    Z = Z.view(rollout_len, 1, -1)
+
+    # normalizations
+    input_images = input_images.unsqueeze(0).float().div(255.0).cuda()
+    input_states = input_states.unsqueeze(0).cuda()
+    input_states -= forward_model.policy_net.stats["s_mean"].view(1, 4).expand(input_states.size())
+    input_states /= forward_model.policy_net.stats["s_std"].view(1, 4).expand(input_states.size())
+
+    input_ego_car = input_images[:, -2:-1, -2:-1]
 
     for current_goal in current_goals:
         for t in range(rollout_len):
             z_t = Z[t]
             a, entropy, mu, std = forward_model.policy_net(
-                input_images.cuda(),
-                input_states.cuda(),
-                goals=current_goal.cuda(),
+                input_images,
+                input_states,
+                goals=current_goal,
                 sample=True,
-                normalize_inputs=True,
-                normalize_outputs=True,
                 normalize_goals=(not forward_model.goal_policy_net),
             )
             pred_image, pred_state = forward_model.forward_single_step(
-                input_images[:, :, :3].contiguous(), input_states, a, z_t
+                input_images[:, :, :3].contiguous(),
+                input_states,
+                a,
+                z_t,
             )
-            pred_image = torch.cat((pred_image, input_ego_car[:, :1]), dim=2)
+            pred_image = torch.cat((pred_image, input_ego_car), dim=2)
             input_images = torch.cat((input_images[:, 1:], pred_image), 1)
             input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
@@ -299,11 +306,10 @@ def process_one_episode(
     env,
     car_path,
     forward_model,
-    policy_network_il,
     data_stats,
     plan_file,
     index,
-    car_sizes,
+    goal_stats,
 ):
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
@@ -337,9 +343,6 @@ def process_one_episode(
     off_screen = False
     forward_model.eval()
     while not done:
-        import ipdb
-
-        ipdb.set_trace()
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
 
@@ -351,7 +354,10 @@ def process_one_episode(
             normalize_inputs=True,
             normalize_outputs=False,
         )
+        current_goals = (current_goals * goal_stats[1]) + goal_stats[0]
+        import ipdb
 
+        ipdb.set_trace()
         current_goal = guess_and_check(
             forward_model, input_images, input_states, current_goals, rollout_len=5
         )
@@ -486,6 +492,8 @@ def main():
 
     data_path = "traffic-data/state-action-cost/data_i80_v0"
 
+    goal_stats = torch.load("goal_stats.pth").to(device)
+
     dataloader = DataLoader(None, opt, "i80")
     (
         forward_model,
@@ -535,7 +543,11 @@ def main():
     action_sequences, state_sequences, cost_sequences = [], [], []
 
     run_name = "eval_" + opt.name if opt.name else None
-    wandb.init(project="mpur-ppuu", name=run_name)
+    wandb.init(
+        project="mpur-ppuu",
+        name=run_name,
+        mode="offline" if opt.name == "debug" else "online",
+    )
     wandb.config.update(opt)
 
     n_test = len(splits["test"])
@@ -565,6 +577,7 @@ def main():
                         plan_file,
                         j,
                         car_sizes,
+                        goal_stats,
                     ),
                 )
             )
@@ -581,11 +594,10 @@ def main():
                 env,
                 car_path,
                 forward_model,
-                policy_network_il,
                 data_stats,
                 plan_file,
                 j,
-                car_sizes,
+                goal_stats,
             )
 
         time_travelled.append(simulation_result.time_travelled)
