@@ -598,11 +598,9 @@ def main():
                         env,
                         car_path,
                         forward_model,
-                        policy_network_il,
                         data_stats,
                         plan_file,
                         j,
-                        car_sizes,
                         goal_stats,
                     ),
                 )
