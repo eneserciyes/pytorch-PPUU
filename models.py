@@ -1072,6 +1072,7 @@ class DeterministicPolicy(nn.Module):
         sample=True,
         normalize_inputs=False,
         normalize_outputs=False,
+        normalize_goals=False,
         n_samples=1,
     ):
 
@@ -1085,8 +1086,9 @@ class DeterministicPolicy(nn.Module):
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
-            # make the goals relative in normalized space
-            goals = goals - states[:, -1, :2]
+            if normalize_goals and goals is not None:
+                # make the goals relative in normalized space
+                goals = goals - states[:, -1, :2]
 
         bsize = state_images.size(0)
 

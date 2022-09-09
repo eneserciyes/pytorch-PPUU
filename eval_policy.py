@@ -271,6 +271,7 @@ def process_one_episode(
     plan_file,
     index,
     car_sizes,
+    goal_stats,
 ):
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
@@ -315,6 +316,8 @@ def process_one_episode(
                 normalize_inputs=True,
                 normalize_outputs=False,
             )
+            # unnormalize goal predictions
+            current_goal = ((current_goal * goal_stats[1]) + goal_stats[0]).squeeze()
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -512,6 +515,7 @@ def main():
     torch.manual_seed(opt.seed)
 
     data_path = "traffic-data/state-action-cost/data_i80_v0"
+    goal_stats = torch.load("goal_stats.pth").to(device)
 
     dataloader = DataLoader(None, opt, "i80")
     (
@@ -592,6 +596,7 @@ def main():
                         plan_file,
                         j,
                         car_sizes,
+                        goal_stats
                     ),
                 )
             )
@@ -613,6 +618,7 @@ def main():
                 plan_file,
                 j,
                 car_sizes,
+                goal_stats
             )
 
         time_travelled.append(simulation_result.time_travelled)
