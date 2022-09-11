@@ -373,20 +373,23 @@ def process_one_episode(
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
 
-        current_goals, _, _, _ = forward_model.goal_policy_net(
-            input_images.cuda(),
-            input_states.cuda(),
-            sample=True,
-            n_samples=opt.n_samples,
-            normalize_inputs=True,
-            normalize_outputs=False,
-        )
-        # unnormalize goal predictions
-        current_goals = (current_goals * goal_stats[1]) + goal_stats[0]
+        if cntr % 5 == 0:
+            current_goals, _, _, _ = forward_model.goal_policy_net(
+                input_images.cuda(),
+                input_states.cuda(),
+                sample=True,
+                n_samples=opt.n_samples,
+                normalize_inputs=True,
+                normalize_outputs=False,
+            )
+            # unnormalize goal predictions
+            current_goals = (current_goals * goal_stats[1]) + goal_stats[0]
+            exploration_noise = torch.randn(size=(opt.n_samples, 2)).cuda() * goal_stats[1].view(1, 2)
+            current_goals = current_goals + exploration_noise
 
-        current_goal = guess_and_check(
-            forward_model, input_images, input_states, current_goals, rollout_len=5
-        )
+            current_goal = guess_and_check(
+                forward_model, input_images, input_states, current_goals, rollout_len=5
+            )
 
         a, entropy, mu, std = forward_model.policy_net(
             input_images.cuda(),
