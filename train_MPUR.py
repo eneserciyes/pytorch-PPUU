@@ -26,7 +26,10 @@ opt = utils.parse_command_line()
 
 if opt.pydevd:
     import pydevd_pycharm
-    pydevd_pycharm.settrace('localhost', port=5724, stdoutToServer=True, stderrToServer=True)
+
+    pydevd_pycharm.settrace(
+        "localhost", port=5724, stdoutToServer=True, stderrToServer=True
+    )
 
 if opt.goal_rollout_len == -1:
     opt.goal_rollout_len = opt.npred
@@ -76,13 +79,13 @@ if opt.value_model != "":
 model.create_policy_net(opt)
 optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
 
+# Create value net
+model.create_value_net(opt)
+value_optimizer = optim.Adam(model.value_net.parameters(), opt.lrt)
+
 # Load normalisation stats
 stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
 model.stats = stats  # used by planning.py/compute_uncertainty_batch
-if "ten" in opt.mfile:
-    p_z_file = opt.model_dir + opt.mfile + ".pz"
-    p_z = torch.load(p_z_file)
-    model.p_z = p_z
 
 # Send to GPU if possible
 model.to(opt.device)
@@ -120,6 +123,9 @@ def start(what, nbatches, npred):
     )
     for j in tqdm.tqdm(range(nbatches)):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
+        import ipdb
+
+        ipdb.set_trace()
         pred, actions = planning.train_policy_net_mpur(
             model,
             inputs,
@@ -143,6 +149,14 @@ def start(what, nbatches, npred):
             * 2  # goal cost is multiplied by 2 to get approx same scale
         )
 
+        value_target = (
+            opt.lambda_l * pred["lane_sum"] + opt.lambda_p * pred["proximity"]
+        )
+        value_loss = torch.nn.functional.mse_loss(
+            1 / (1e-6 + pred["value"]), value_target
+        )
+        wandb.log({"value_target": value_target, "value_loss": value_loss})
+        # update policy
         if not math.isnan(pred["policy"].item()):
             if train:
                 optimizer.zero_grad()
@@ -158,6 +172,13 @@ def start(what, nbatches, npred):
         else:
             print("warning, NaN")  # Oh no... Something got quite fucked up!
             ipdb.set_trace()
+
+        # update value
+        if not math.isnan(value_loss.item()):
+            if train:
+                value_optimizer.zero_grad()
+                value_loss.backward()
+                value_optimizer.step()
 
         if j == 0 and opt.save_movies and train:
             # save videos of normal and adversarial scenarios

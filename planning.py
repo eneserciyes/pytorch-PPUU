@@ -504,6 +504,13 @@ def train_policy_net_mpur(
     Z = Z.view(npred, bsize, -1)
     # get initial action sequence, for an episode long npred (= 20) steps
     model.eval()
+
+    # get value estimate
+    if hasattr(model, "value_net"):
+        value_estimate = model.value_net(input_images, input_states)
+    else:
+        value_estimate = None
+
     # current position here
     current_position = input_states[:, -1, :2]
     # get a list of goals
@@ -515,19 +522,10 @@ def train_policy_net_mpur(
         #     input_images, input_states, current_goal, t, s_std=model.stats["s_std"]
         # )
         actions, _, _, _ = model.policy_net(
-            input_images, input_states, goals=(current_goal-current_position)
+            input_images, input_states, goals=(current_goal - current_position)
         )  # pass goal here
-        if infer_z:
-            h_x = model.encoder(input_images, input_states)
-            h_y = model.y_encoder(target_images[:, t].unsqueeze(1).contiguous())
-            mu_logvar = model.z_network((h_x + h_y).view(bsize, -1)).view(
-                bsize, 2, model.opt.nz
-            )
-            mu = mu_logvar[:, 0]
-            logvar = mu_logvar[:, 1]
-            z_t = model.reparameterize(mu, logvar, True)
-        else:
-            z_t = Z[t]
+
+        z_t = Z[t]
         pred_image, pred_state = model.forward_single_step(
             input_images[:, :, :3].contiguous(), input_states, actions, z_t
         )
@@ -641,15 +639,11 @@ def train_policy_net_mpur(
     # compute goal cost
     goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
 
-    # if hasattr(model, "value_function"):
-    #     proximity_loss = torch.mean(torch.cat((proximity_cost, v), 1) * gamma_mask)
-    #     lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
-    # else:
     lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
-    offroad_cost = torch.tensor([0.0]).to(
-        lane_loss.device
-    )  # torch.mean(offroad_cost * gamma_mask[:, :npred])
+    lane_loss_sum = torch.sum(lane_loss * gamma_mask[:, :npred], dim=-1)
+    offroad_cost = torch.tensor([0.0]).to(lane_loss.device)
     proximity_loss = torch.mean(proximity_cost * gamma_mask[:, :npred])
+    proximity_loss_sum = torch.sum(proximity_cost * gamma_mask[:, :npred], dim=-1)
     # computer goal loss with gamma mask
     goal_loss = torch.sum(goal_cost * gamma_mask[:, :npred]) / (
         goal_rollout_len * goal_cost.size(0)
@@ -677,11 +671,14 @@ def train_policy_net_mpur(
         ).clamp(max=1.0),
         state_vct=pred_states,
         proximity=proximity_loss,
+        proximity_sum=proximity_loss_sum,
         lane=lane_loss,
+        lane_sum=lane_loss_sum,
         offroad=offroad_cost,
         goal=goal_loss,
         uncertainty=total_u_loss,
         action=loss_a,
+        value=value_estimate,
     )
 
     return predictions, pred_actions

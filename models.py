@@ -823,10 +823,9 @@ class FwdCNN_VAE(nn.Module):
             self.policy_net = StochasticPolicy(opt)
         elif opt.policy == "policy-deterministic":
             self.policy_net = DeterministicPolicy(opt)
-        # if opt.policy == "policy-ten":
-        #     self.policy_net = PolicyTEN(opt)
-        # elif opt.policy == "policy-vae":
-        #     self.policy_net = PolicyVAE(opt)
+
+    def create_value_net(self, opt):
+        self.value_net = DeterministicPolicy(opt, output_dim=1, goals=False)
 
     def create_prior_net(self, opt):
         self.prior_net = PriorGaussian(opt, opt.context_dim)
@@ -1078,8 +1077,9 @@ class DeterministicPolicy(nn.Module):
             if state_images.dim() == 4:  # if processing single vehicle
                 state_images = state_images.cuda().unsqueeze(0)
                 states = states.cuda().unsqueeze(0)
-            # make the goals relative in normalized space
-            goals = goals - states[:, -1, :2]
+            if goals is not None:
+                # make the goals relative in normalized space
+                goals = goals - states[:, -1, :2]
 
         bsize = state_images.size(0)
 
