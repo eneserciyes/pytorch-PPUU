@@ -1,13 +1,14 @@
 #!/bin/bash
 #
-#SBATCH --job-name=train_MPUR_goal
-#SBATCH --output=logs/train_MPUR_goal_%j.out
-#SBATCH --error=logs/train_MPUR_goal_%j.err
+#SBATCH --job-name=train_MPUR_goal_value_net
+#SBATCH --output=logs/train_MPUR_goal_value_net_%j.out
+#SBATCH --error=logs/train_MPUR_goal_value_net_%j.err
 #SBATCH --time=32:00:00
 #SBATCH --gres gpu:1
 #SBATCH --account="vita"
 #SBATCH --nodes=1
 #SBATCH --mem=48000
+#SBATCH --cpus-per-task=20
 #SBATCH --mail-type=END,FAIL # notifications for job done & fail
 
 eval "$(conda shell.bash hook)"
