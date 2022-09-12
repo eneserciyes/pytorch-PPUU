@@ -549,9 +549,7 @@ def train_policy_net_mpur(
         # update current position
         current_state = input_states[:, -1]
         current_position = input_states[:, -1, :2]
-    import ipdb
 
-    ipdb.set_trace()
     pred_images = torch.cat(pred_images, 1)
     pred_states = torch.stack(pred_states, 1)
     pred_actions = torch.stack(pred_actions, 1)
