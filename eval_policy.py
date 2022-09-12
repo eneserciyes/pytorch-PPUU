@@ -98,6 +98,8 @@ def load_models(opt, data_path, device="cuda"):
                 forward_model.policy_net.stats[k] = v.to(device)
 
     # forward_model = forward_model.share_memory()
+    if forward_model.goal_policy_net:
+        forward_model.goal_policy_net.stats = forward_model.policy_net.stats
 
     if "ten" in opt.mfile:
         forward_model.p_z = torch.load(path.join(opt.model_dir, f"{opt.mfile}.pz"))
@@ -182,7 +184,7 @@ def parse_args():
     parser.add_argument("-bprop_buffer", type=int, default=1, help=" ")
     parser.add_argument("-bprop_save_opt_stats", type=int, default=1, help=" ")
     parser.add_argument("-n_dropout_models", type=int, default=10, help=" ")
-    parser.add_argument("-ghost", default=True, action="store_true")
+    parser.add_argument("-ghost", default=False, action="store_true")
     parser.add_argument("-opt_z", type=int, default=0, help=" ")
     parser.add_argument("-opt_a", type=int, default=1, help=" ")
     parser.add_argument("-u_reg", type=float, default=0.0, help=" ")
@@ -240,6 +242,9 @@ def parse_args():
     parser.add_argument(
         "-save_grad_vid", action="store_true", help="save gradients wrt states"
     )
+    parser.add_argument(
+        "-save_ego_movie", action="store_true", help="save ego movie"
+    )
 
     opt = parser.parse_args()
     opt.save_dir = path.join(opt.model_dir, "planning_results")
@@ -266,6 +271,7 @@ def process_one_episode(
     plan_file,
     index,
     car_sizes,
+    goal_stats,
 ):
     movie_dir = path.join(opt.save_dir, "videos_simulator", plan_file, f"ep{index + 1}")
     if opt.save_grad_vid:
@@ -282,7 +288,8 @@ def process_one_episode(
             env.ghost.step(env.ghost.policy())
     forward_model.reset_action_buffer(opt.npred)
     done, mu, std = False, None, None
-    images, states, costs, actions, mu_list, std_list, grad_list = (
+    images, states, costs, goals, actions, mu_list, std_list, grad_list = (
+        [],
         [],
         [],
         [],
@@ -299,7 +306,18 @@ def process_one_episode(
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        current_goal = env.ghost.get_state()[:2] if env.ghost else None
+        if not forward_model.goal_policy_net:
+            current_goal = env.ghost.get_state()[:2] if env.ghost else None
+        elif forward_model.goal_policy_net and cntr % 5 == 0:
+            current_goal, _, _, _ = forward_model.goal_policy_net(
+                input_images.cuda(),
+                input_states.cuda(),
+                sample=True,
+                normalize_inputs=True,
+                normalize_outputs=False,
+            )
+            # unnormalize goal predictions
+            current_goal = ((current_goal * goal_stats[1]) + goal_stats[0]).squeeze()
         if opt.save_grad_vid:
             grad_list.append(
                 planning.get_grad_vid(
@@ -360,6 +378,7 @@ def process_one_episode(
                 sample=True,
                 normalize_inputs=True,
                 normalize_outputs=True,
+                normalize_goals=(not forward_model.goal_policy_net),
             )
             a = a.cpu().view(1, 2).numpy()
         elif opt.method == "bprop+policy-IL":
@@ -411,6 +430,9 @@ def process_one_episode(
                 actions.append(
                     ((torch.tensor(a[t]) - data_stats["a_mean"]) / data_stats["a_std"])
                 )
+                if current_goal is not None:
+                    current_goal_normalized = current_goal.cpu() * data_stats["s_std"][:2]
+                    goals.append(torch.tensor([current_goal_normalized[1], current_goal_normalized[0]]))
                 if mu is not None:
                     mu_list.append(mu.data.cpu().numpy())
                     std_list.append(std.data.cpu().numpy())
@@ -427,16 +449,18 @@ def process_one_episode(
     states = torch.stack(states)
     costs = torch.tensor(costs)
     actions = torch.stack(actions)
+    goals = torch.stack(goals)
     if opt.save_grad_vid:
         grads = torch.cat(grad_list)
 
-    if len(images) > 3 and False:  # cancelled
+    if len(images) > 3 and opt.save_ego_movie:
         images_3_channels = (images[:, :3] + images[:, 3:]).clamp(max=255)
         utils.save_movie(
             path.join(movie_dir, "ego"),
             images_3_channels.float() / 255.0,
             states,
             costs,
+            goals=goals,
             actions=actions,
             mu=mu_list,
             std=std_list,
@@ -491,6 +515,7 @@ def main():
     torch.manual_seed(opt.seed)
 
     data_path = "traffic-data/state-action-cost/data_i80_v0"
+    goal_stats = torch.load("goal_stats.pth").to(device)
 
     dataloader = DataLoader(None, opt, "i80")
     (
@@ -571,6 +596,7 @@ def main():
                         plan_file,
                         j,
                         car_sizes,
+                        goal_stats
                     ),
                 )
             )
@@ -592,6 +618,7 @@ def main():
                 plan_file,
                 j,
                 car_sizes,
+                goal_stats
             )
 
         time_travelled.append(simulation_result.time_travelled)

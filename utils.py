@@ -355,6 +355,7 @@ def save_movie(
     states,
     costs=None,
     actions=None,
+    goals=None,
     mu=None,
     std=None,
     pytorch=True,
@@ -392,6 +393,30 @@ def save_movie(
         draw = ImageDraw.Draw(pil)
 
         text = ""
+        if goals is not None:
+            import ipdb
+            ipdb.set_trace()
+            text += f"g: [{goals[t][1]:.2f}, {goals[t][0]:.2f}]\n"
+            pixel_goal = (
+                (goals * 0.3048 * (24 / 3.7)).round().to(torch.int)
+            )  # goal (feet) * [meter / feet] * [pixel / meter]
+
+            centre_pixel = torch.tensor(
+                [pil.size[0] // 2, pil.size[1] // 2]
+            )  # x: longitudinal, y: latitudinal axis
+            pixel_goal = centre_pixel - 5 * pixel_goal
+            try:
+                draw.ellipse(
+                    (
+                        pixel_goal[0] - 5,
+                        pixel_goal[1] - 5,
+                        pixel_goal[1] + 5,
+                        pixel_goal[1] + 5,
+                    ),
+                    fill=(242, 187, 19),
+                )
+            except SystemError:
+                pass
         if states is not None:
             text += f"x: [{states[t][0]:.2f}, {states[t][1]:.2f} \n"
             text += f"dx: {states[t][2]:.2f}, {states[t][3]:.2f}]\n"
@@ -589,7 +614,8 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument("-dataset", type=str, default="i80")
     parser.add_argument("-v", type=int, default=4)
     parser.add_argument("-model", type=str, default="fwd-cnn")
-    parser.add_argument("-policy", type=str, default="policy-deterministic")
+    parser.add_argument("-policy", type=str, default="policy-gauss")
+    parser.add_argument("-goal_policy", type=str, default="policy-gauss")
     parser.add_argument("-model_dir", type=str, default="models/")
     parser.add_argument("-ncond", type=int, default=20)
     parser.add_argument("-npred", type=int, default=30)
@@ -623,6 +649,9 @@ def parse_command_line(parser=None, args=None):
     )
     parser.add_argument(
         "-lambda_p", type=float, default=1.0, help="coefficient of proximity cost"
+    )
+    parser.add_argument(
+        "-lambda_gp", type=float, default=1.0, help="coefficient of goal predictor cost"
     )
     parser.add_argument(
         "-goal_distance", type=int, default=5, help="goal distance for training"
@@ -662,6 +691,7 @@ def parse_command_line(parser=None, args=None):
     parser.add_argument("-debug", action="store_true")
     parser.add_argument("-pydevd", action="store_true")
     parser.add_argument("-efficient_dataloader", action="store_true")
+    parser.add_argument("-train_policy", type=str, default="low_level")
     parser.add_argument("-save_movies", action="store_true")
     parser.add_argument("-l2reg", type=float, default=0.0)
     parser.add_argument("-no_cuda", action="store_true")

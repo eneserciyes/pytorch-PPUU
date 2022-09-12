@@ -17,7 +17,7 @@ from dataloader import DataLoader
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-torch.autograd.set_detect_anomaly(True)
+
 #################################################
 # Train a policy / controller
 #################################################
@@ -31,8 +31,6 @@ if opt.pydevd:
         "localhost", port=5724, stdoutToServer=True, stderrToServer=True
     )
 
-if opt.goal_rollout_len == -1:
-    opt.goal_rollout_len = opt.npred
 # Create file_name
 opt.model_file = path.join(opt.model_dir, "policy_networks", "MPUR-" + opt.policy)
 utils.build_model_file_name(opt)
@@ -62,11 +60,12 @@ elif path.exists(opt.mfile):
 else:
     raise RuntimeError(f"couldn't find file {opt.mfile}")
 
+if type(model) is dict:
+    model = model["model"]
+
 if not hasattr(model.encoder, "n_channels"):
     model.encoder.n_channels = 3
 
-if type(model) is dict:
-    model = model["model"]
 model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
 model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
 if opt.value_model != "":
@@ -75,9 +74,14 @@ if opt.value_model != "":
     ).to(opt.device)
     model.value_function = value_function
 
-# Create policy
-model.create_policy_net(opt)
-optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
+if opt.train_policy == "low_level":
+    # Create policy
+    model.create_policy_net(opt)
+    optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
+elif opt.train_policy == "goal":
+    assert model.policy_net, "policy net is not trained"
+    model.create_goal_net(opt)
+    optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
 
 # Create value net
 model.create_value_net(opt)
@@ -94,7 +98,7 @@ for k, v in stats.items():
     if isinstance(v, torch.Tensor):
         model.policy_net.stats_d[k] = v.to(opt.device)
 
-if opt.learned_cost:
+if opt.learned_cost and opt.train_policy == "low_level":
     print("[loading cost regressor]")
     model.cost = torch.load(path.join(opt.model_dir, opt.mfile + ".cost.model"))[
         "model"
@@ -107,10 +111,12 @@ planning.estimate_uncertainty_stats(model, dataloader, n_batches=50, npred=opt.n
 model.eval()
 
 
-def start(what, nbatches, npred):
+def start(what, nbatches, npred, epoch):
     train = True if what == "train" else False
     model.train()
     model.policy_net.train()
+    if model.goal_policy_net:
+        model.goal_policy_net.train()
     n_updates, grad_norm = 0, 0
     total_losses = dict(
         proximity=0,
@@ -120,6 +126,7 @@ def start(what, nbatches, npred):
         action=0,
         policy=0,
         goal=0,
+        goal_predictor=0,
     )
     for j in tqdm.tqdm(range(nbatches)):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
@@ -130,6 +137,7 @@ def start(what, nbatches, npred):
             car_sizes,
             goal_distance=opt.goal_distance,
             goal_rollout_len=opt.goal_rollout_len,
+            index=(epoch * nbatches) + j,
             n_models=10,
             lrt_z=opt.lrt_z,
             n_updates_z=opt.z_updates,
@@ -141,13 +149,10 @@ def start(what, nbatches, npred):
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
-            + opt.lambda_g
-            * pred["goal"]
-            * 2  # goal cost is multiplied by 2 to get approx same scale
+            # goal cost is multiplied by 2 to get approx same scale
+            + opt.lambda_g * pred["goal"] * 2
+            + opt.lambda_gp * pred["goal_predictor"]
         )
-        import ipdb
-
-        ipdb.set_trace()
 
         value_target = 1 / (
             1e-6
@@ -160,14 +165,16 @@ def start(what, nbatches, npred):
             target=value_target_no_grad.view(-1, 1),
         )
         wandb.log({"value_target": torch.mean(value_target), "value_loss": value_loss})
+
         # update policy
+        updated_model = model.goal_policy_net if opt.train_policy == 'goal' else model.policy_net
         if not math.isnan(pred["policy"].item()):
             if train:
                 optimizer.zero_grad()
                 pred["policy"].backward()  # back-propagation through time!
-                grad_norm += utils.grad_norm(model.policy_net).item()
+                grad_norm += utils.grad_norm(updated_model).item()
                 torch.nn.utils.clip_grad_norm_(
-                    model.policy_net.parameters(), opt.grad_clip
+                    updated_model.parameters(), opt.grad_clip
                 )
                 optimizer.step()
             for loss in total_losses:
@@ -219,6 +226,7 @@ losses = OrderedDict(
     a="action",
     g="goal",
     π="policy",
+    gp="goal_predictor",
 )
 
 # writer = utils.create_tensorboard_writer(opt)
@@ -231,7 +239,7 @@ for i in range(250):
     n_iter += opt.epoch_size
     log_string = f"step {n_iter} | "
     train_losses = start(
-        "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred
+        "train", opt.epoch_size if opt.name != "debug" else 1, opt.npred, i
     )
     wandb.log(
         {f"Loss/train_{key}": value for key, value in train_losses.items()}, step=i
@@ -244,7 +252,7 @@ for i in range(250):
     if (i + 1) % 5 == 0:
         with torch.no_grad():  # Torch, please please please, do not track computations :)
             valid_losses = start(
-                "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred
+                "valid", opt.epoch_size // 2 if opt.name != "debug" else 1, opt.npred, i
             )
         if valid_losses["policy"] < best_loss:
             best_loss = valid_losses["policy"]

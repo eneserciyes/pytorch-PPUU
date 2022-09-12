@@ -1,6 +1,8 @@
 import torch
 import torch.optim as optim
 import numpy
+import wandb
+
 import utils
 import matplotlib.pyplot as plt
 
@@ -422,12 +424,11 @@ def compute_goal_cost(
     return goal_cost
 
 
-# TODO: visualize goal input to the model
 def visualize_goal_input(
+    what: str,
     input_images: torch.Tensor,
-    input_states: torch.Tensor,
     current_goal: torch.Tensor,
-    t: int,
+    index: int,
     s_std: torch.Tensor,
 ) -> None:
     """
@@ -443,16 +444,19 @@ def visualize_goal_input(
     viz_image = images_with_ego[0, -1, :3].permute((1, 2, 0)).detach().cpu()
 
     # goal in pixels
-    rel_goal = (current_goal - input_states[..., -1, :2]).detach().cpu()
+    rel_goal = current_goal.detach().cpu()
     unnormalized_rel_goal = rel_goal * s_std[:2]
     pixel_goal = (
         (unnormalized_rel_goal * 0.3048 * (24 / 3.7)).round().to(torch.int)
     )  # goal (feet) * [meter / feet] * [pixel / meter]
+
     centre_pixel = torch.tensor(
         [input_images.size(3) // 2, input_images.size(4) // 2]
     )  # x: longitudinal, y: latitudinal axis
     pixel_goal = centre_pixel - pixel_goal
 
+    if pixel_goal[0, 0] < 0:
+        return
     # plot
     viz_image[
         pixel_goal[0, 0] - 1 : pixel_goal[0, 0] + 1,
@@ -460,7 +464,7 @@ def visualize_goal_input(
         :,
     ] = torch.ones(1, 3)
     plt.imshow(viz_image)
-    plt.savefig(f"goal_viz_test_{t}.png")
+    wandb.log({f"{what}/goal_viz": plt}, step=index)
 
 
 def train_policy_net_mpur(
@@ -470,6 +474,7 @@ def train_policy_net_mpur(
     car_sizes,
     goal_distance,
     goal_rollout_len,
+    index,
     n_models=10,
     sampling_method="fp",
     lrt_z=0.1,
@@ -494,7 +499,8 @@ def train_policy_net_mpur(
         pred_actions,
         current_goals,
         current_positions,
-    ) = ([], [], [], [], [], [])
+        goal_predictor_costs,
+    ) = ([], [], [], [], [], [], [])
 
     # total_ploss = torch.zeros(1).cuda()
     # Sample latent variables from a (fixed) prior
@@ -515,14 +521,22 @@ def train_policy_net_mpur(
     current_position = input_states[:, -1, :2]
     # get a list of goals
     goal_list = target_states[:, goal_distance::goal_distance, :2]
+    previous_goal = None
     for t in range(npred):
         # choose a goal depending on the distance from current position
-        current_goal = get_goal(current_position, goal_list)
-        # visualize_goal_input(
-        #     input_images, input_states, current_goal, t, s_std=model.stats["s_std"]
-        # )
+        gt_goal = get_goal(current_position, goal_list) - current_position
+        if model.goal_policy_net:
+            current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
+            goal_predictor_cost = torch.nn.functional.mse_loss(current_goal, gt_goal)
+        else:
+            current_goal = gt_goal
+            goal_predictor_cost = torch.tensor(0.0).to(gt_goal.device)
+        if index % 100 == 0 and t == 0:
+            visualize_goal_input(
+                "train", input_images, current_goal, index, s_std=model.stats["s_std"]
+            )
         actions, _, _, _ = model.policy_net(
-            input_images, input_states, goals=(current_goal - current_position)
+            input_images, input_states, goals=current_goal
         )  # pass goal here
 
         z_t = Z[t]
@@ -541,6 +555,7 @@ def train_policy_net_mpur(
         pred_images.append(pred_image)
         pred_states.append(pred_state)
         pred_actions.append(actions)
+        goal_predictor_costs.append(goal_predictor_cost)
 
         # update current position
         current_position = input_states[:, -1, :2]
@@ -550,6 +565,7 @@ def train_policy_net_mpur(
     pred_actions = torch.stack(pred_actions, 1)
     current_goals = torch.stack(current_goals, 1)
     current_positions = torch.stack(current_positions, 1)
+    goal_predictor_costs = torch.stack(goal_predictor_costs)
 
     input_images = input_images_orig.clone()
     input_states = input_states_orig.clone()
@@ -648,6 +664,7 @@ def train_policy_net_mpur(
     goal_loss = torch.sum(goal_cost * gamma_mask[:, :npred]) / (
         goal_rollout_len * goal_cost.size(0)
     )
+    goal_predictor_loss = torch.mean(goal_predictor_costs * gamma_mask[:, :npred])
     _, _, _, _, _, _, total_u_loss = compute_uncertainty_batch(
         model,
         input_images,
@@ -676,6 +693,7 @@ def train_policy_net_mpur(
         lane_sum=lane_loss_sum,
         offroad=offroad_cost,
         goal=goal_loss,
+        goal_predictor=goal_predictor_loss,
         uncertainty=total_u_loss,
         action=loss_a,
         value=value_estimate,
