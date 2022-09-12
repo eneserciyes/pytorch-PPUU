@@ -26,7 +26,10 @@ opt = utils.parse_command_line()
 
 if opt.pydevd:
     import pydevd_pycharm
-    pydevd_pycharm.settrace('localhost', port=5724, stdoutToServer=True, stderrToServer=True)
+
+    pydevd_pycharm.settrace(
+        "localhost", port=5724, stdoutToServer=True, stderrToServer=True
+    )
 
 if opt.goal_rollout_len == -1:
     opt.goal_rollout_len = opt.npred
@@ -138,9 +141,7 @@ def start(what, nbatches, npred):
             + opt.lambda_l * pred["lane"]
             + opt.lambda_a * pred["action"]
             + opt.lambda_o * pred["offroad"]
-            + opt.lambda_g
-            * pred["goal"]
-            * 2  # goal cost is multiplied by 2 to get approx same scale
+            + opt.lambda_g * pred["goal"]
         )
 
         if not math.isnan(pred["policy"].item()):

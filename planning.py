@@ -395,7 +395,7 @@ def get_goal(current_position: torch.Tensor, goal_list: torch.Tensor) -> torch.T
     bsize = goal_list.size(0)
 
     cpr = current_position.unsqueeze(1).repeat(1, goal_list.size(1), 1)
-    diff = goal_list - cpr
+    diff = goal_list[..., :2] - cpr
     goals_in_front = [goal_list[batch, diff[batch, :, 0] > 0] for batch in range(bsize)]
     goals_in_front = [
         goals[0] if goals.nelement() != 0 else goal_list[batch, -1, :]
@@ -405,7 +405,7 @@ def get_goal(current_position: torch.Tensor, goal_list: torch.Tensor) -> torch.T
 
 
 def compute_goal_cost(
-    current_positions: torch.Tensor, current_goals: torch.Tensor, goal_rollout_len: int
+    current_states: torch.Tensor, current_goals: torch.Tensor, goal_rollout_len: int
 ) -> torch.Tensor:
     """
     current_positions: B x Rollout x 2
@@ -414,7 +414,7 @@ def compute_goal_cost(
     return:
     goal_cost: B x Rollout
     """
-    diff = current_goals - current_positions
+    diff = current_goals - current_states
     goal_cost = torch.linalg.norm(diff, dim=2)
     goal_rollout_mask = torch.ones_like(goal_cost)
     goal_rollout_mask[:, goal_rollout_len:] = 0.0
@@ -493,7 +493,7 @@ def train_policy_net_mpur(
         pred_costs,
         pred_actions,
         current_goals,
-        current_positions,
+        current_states,
     ) = ([], [], [], [], [], [])
 
     # total_ploss = torch.zeros(1).cuda()
@@ -505,9 +505,11 @@ def train_policy_net_mpur(
     # get initial action sequence, for an episode long npred (= 20) steps
     model.eval()
     # current position here
+
+    current_state = input_states[:, -1]
     current_position = input_states[:, -1, :2]
     # get a list of goals
-    goal_list = target_states[:, goal_distance::goal_distance, :2]
+    goal_list = target_states[:, goal_distance::goal_distance]
     for t in range(npred):
         # choose a goal depending on the distance from current position
         current_goal = get_goal(current_position, goal_list)
@@ -515,7 +517,7 @@ def train_policy_net_mpur(
         #     input_images, input_states, current_goal, t, s_std=model.stats["s_std"]
         # )
         actions, _, _, _ = model.policy_net(
-            input_images, input_states, goals=(current_goal-current_position)
+            input_images, input_states, goals=(current_goal - current_state)
         )  # pass goal here
         if infer_z:
             h_x = model.encoder(input_images, input_states)
@@ -538,20 +540,23 @@ def train_policy_net_mpur(
         input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
         # record goals here
-        current_positions.append(current_position)
+        current_states.append(current_state)
         current_goals.append(current_goal)
         pred_images.append(pred_image)
         pred_states.append(pred_state)
         pred_actions.append(actions)
 
         # update current position
+        current_state = input_states[:, -1]
         current_position = input_states[:, -1, :2]
+    import ipdb
 
+    ipdb.set_trace()
     pred_images = torch.cat(pred_images, 1)
     pred_states = torch.stack(pred_states, 1)
     pred_actions = torch.stack(pred_actions, 1)
     current_goals = torch.stack(current_goals, 1)
-    current_positions = torch.stack(current_positions, 1)
+    current_states = torch.stack(current_states, 1)
 
     input_images = input_images_orig.clone()
     input_states = input_states_orig.clone()
@@ -639,7 +644,7 @@ def train_policy_net_mpur(
         proximity_cost = pred_costs[:, :, 0]
         lane_cost = pred_costs[:, :, 1]
     # compute goal cost
-    goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
+    goal_cost = compute_goal_cost(current_states, current_goals, goal_rollout_len)
 
     # if hasattr(model, "value_function"):
     #     proximity_loss = torch.mean(torch.cat((proximity_cost, v), 1) * gamma_mask)

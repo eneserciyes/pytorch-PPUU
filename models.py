@@ -947,7 +947,7 @@ class StochasticPolicy(nn.Module):
 
         if goals:
             self.goal_encoder = nn.Sequential(
-                nn.Linear(2, opt.n_hidden),
+                nn.Linear(4, opt.n_hidden),
                 nn.ReLU(),
                 nn.Linear(opt.n_hidden, opt.n_hidden),
                 nn.ReLU(),
@@ -1049,7 +1049,7 @@ class DeterministicPolicy(nn.Module):
 
         if goals:
             self.goal_encoder = nn.Sequential(
-                nn.Linear(2, opt.n_hidden),
+                nn.Linear(4, opt.n_hidden),
                 nn.ReLU(),
                 nn.Linear(opt.n_hidden, opt.n_hidden),
                 nn.ReLU(),
