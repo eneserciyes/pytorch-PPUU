@@ -8,6 +8,7 @@
 #SBATCH --account="vita"
 #SBATCH --nodes=1
 #SBATCH --mem=48000
+#SBATCH --cpus-per-task=20
 #SBATCH --mail-type=END,FAIL # notifications for job done & fail
 
 eval "$(conda shell.bash hook)"
