@@ -17,7 +17,7 @@ from dataloader import DataLoader
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-
+torch.autograd.set_detect_anomaly(True)
 #################################################
 # Train a policy / controller
 #################################################
@@ -123,9 +123,6 @@ def start(what, nbatches, npred):
     )
     for j in tqdm.tqdm(range(nbatches)):
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(what, npred)
-        import ipdb
-
-        ipdb.set_trace()
         pred, actions = planning.train_policy_net_mpur(
             model,
             inputs,
@@ -148,14 +145,21 @@ def start(what, nbatches, npred):
             * pred["goal"]
             * 2  # goal cost is multiplied by 2 to get approx same scale
         )
+        import ipdb
 
-        value_target = (
-            opt.lambda_l * pred["lane_sum"] + opt.lambda_p * pred["proximity"]
+        ipdb.set_trace()
+
+        value_target = 1 / (
+            1e-6
+            + opt.lambda_l * pred["lane_sum"]
+            + opt.lambda_p * pred["proximity_sum"]
         )
+        value_target_no_grad = value_target.detach()
         value_loss = torch.nn.functional.mse_loss(
-            1 / (1e-6 + pred["value"]), value_target
+            input=pred["value"],
+            target=value_target_no_grad.view(-1, 1),
         )
-        wandb.log({"value_target": value_target, "value_loss": value_loss})
+        wandb.log({"value_target": torch.mean(value_target), "value_loss": value_loss})
         # update policy
         if not math.isnan(pred["policy"].item()):
             if train:
@@ -174,6 +178,7 @@ def start(what, nbatches, npred):
             ipdb.set_trace()
 
         # update value
+
         if not math.isnan(value_loss.item()):
             if train:
                 value_optimizer.zero_grad()

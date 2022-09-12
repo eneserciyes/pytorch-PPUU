@@ -507,7 +507,7 @@ def train_policy_net_mpur(
 
     # get value estimate
     if hasattr(model, "value_net"):
-        value_estimate = model.value_net(input_images, input_states)
+        value_estimate, _, _, _ = model.value_net(input_images, input_states)
     else:
         value_estimate = None
 
@@ -640,7 +640,7 @@ def train_policy_net_mpur(
     goal_cost = compute_goal_cost(current_positions, current_goals, goal_rollout_len)
 
     lane_loss = torch.mean(lane_cost * gamma_mask[:, :npred])
-    lane_loss_sum = torch.sum(lane_loss * gamma_mask[:, :npred], dim=-1)
+    lane_loss_sum = torch.sum(lane_cost * gamma_mask[:, :npred], dim=-1)
     offroad_cost = torch.tensor([0.0]).to(lane_loss.device)
     proximity_loss = torch.mean(proximity_cost * gamma_mask[:, :npred])
     proximity_loss_sum = torch.sum(proximity_cost * gamma_mask[:, :npred], dim=-1)
