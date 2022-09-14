@@ -71,3 +71,7 @@ def main():
         visualize_goal_predictions(
             model=forward_model, batch=batch, goal_stats=goal_stats, index=i
         )
+
+
+if __name__ == "__main__":
+    main()
