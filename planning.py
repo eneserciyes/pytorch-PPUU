@@ -545,9 +545,9 @@ def train_policy_net_mpur(
         if index % 100 == 0 and t == 0:
             visualize_goal_input(
                 "train",
-                input_images,
-                current_goal,
-                gt_goal,
+                input_images[0:1],
+                current_goal[0],
+                gt_goal[0],
                 index,
                 s_std=model.stats["s_std"],
             )

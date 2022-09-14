@@ -7,6 +7,7 @@
 #SBATCH --gres gpu:1
 #SBATCH --account="vita"
 #SBATCH --nodes=1
+#SBATCH --cpus-per-task=20
 #SBATCH --mem=48000
 #SBATCH --mail-type=END,FAIL # notifications for job done & fail
 

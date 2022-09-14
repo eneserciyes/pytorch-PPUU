@@ -214,7 +214,11 @@ losses = OrderedDict(
 
 # writer = utils.create_tensorboard_writer(opt)
 run_name = opt.name if opt.name else None
-wandb.init(project="mpur-ppuu", name=run_name)
+wandb.init(
+    project="goal_predictor_mpur",
+    name=run_name,
+    mode="offline" if opt.name == "debug" else "online",
+)
 wandb.config.update(opt)
 
 best_loss = float("inf")
