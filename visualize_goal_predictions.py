@@ -26,7 +26,7 @@ def visualize_goal_predictions(model, batch, goal_stats, index, goal_distance=5)
     current_position = input_states[:, -1, :2]
     gt_goal = get_goal(current_position, goal_list) - current_position
     current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
-    if goal_stats:
+    if goal_stats is not None:
         # unnormalize goal predictions
         current_goal = ((current_goal * goal_stats[1]) + goal_stats[0]).squeeze()
     visualize_goal_input(
