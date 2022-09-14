@@ -303,7 +303,7 @@ def process_one_episode(
         input_states = inputs["state"].contiguous()
         if not forward_model.goal_policy_net:
             current_goal = env.ghost.get_state()[:2] if env.ghost else None
-        elif forward_model.goal_policy_net and cntr % 5 == 0:
+        elif forward_model.goal_policy_net:
             current_goal, _, _, _ = forward_model.goal_policy_net(
                 input_images.cuda(),
                 input_states.cuda(),
