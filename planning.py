@@ -424,10 +424,20 @@ def compute_goal_cost(
     return goal_cost
 
 
+def goal_to_pixel_goal(goal: torch.Tensor, centre: torch.Tensor, s_std: torch.Tensor):
+    rel_goal = goal.detach().cpu()
+    unnormalized_rel_goal = rel_goal * s_std[:2]
+    goal_in_pixel_space = (
+        (unnormalized_rel_goal * 0.3048 * (24 / 3.7)).round().to(torch.int)
+    )  # goal (feet) * [meter / feet] * [pixel / meter]
+    return centre - goal_in_pixel_space
+
+
 def visualize_goal_input(
     what: str,
     input_images: torch.Tensor,
     current_goal: torch.Tensor,
+    gt_goal: torch.Tensor,
     index: int,
     s_std: torch.Tensor,
 ) -> None:
@@ -436,6 +446,7 @@ def visualize_goal_input(
     input_states: B x Conditional x 4
     current_goal: B x 2
     """
+
     # ego image creation
     images_with_ego = input_images.clone()
     ego_car = input_images[..., 3:, :, :]
@@ -443,28 +454,32 @@ def visualize_goal_input(
 
     viz_image = images_with_ego[0, -1, :3].permute((1, 2, 0)).detach().cpu()
 
-    # goal in pixels
-    rel_goal = current_goal.detach().cpu()
-    unnormalized_rel_goal = rel_goal * s_std[:2]
-    pixel_goal = (
-        (unnormalized_rel_goal * 0.3048 * (24 / 3.7)).round().to(torch.int)
-    )  # goal (feet) * [meter / feet] * [pixel / meter]
-
     centre_pixel = torch.tensor(
         [input_images.size(3) // 2, input_images.size(4) // 2]
     )  # x: longitudinal, y: latitudinal axis
-    pixel_goal = centre_pixel - pixel_goal
+    pixel_goal = goal_to_pixel_goal(current_goal, centre_pixel, s_std)
+    gt_pixel_goal = goal_to_pixel_goal(gt_goal, centre_pixel, s_std)
 
-    if pixel_goal[0, 0] < 0:
-        return
-    # plot
-    viz_image[
-        pixel_goal[0, 0] - 1 : pixel_goal[0, 0] + 1,
-        pixel_goal[0, 1] - 1 : pixel_goal[0, 1] + 1,
-        :,
-    ] = torch.ones(1, 3)
-    plt.imshow(viz_image)
-    wandb.log({f"{what}/goal_viz": plt}, step=index)
+    draw = False
+    if pixel_goal[0, 0] > 0:
+        # plot pixel goal
+        viz_image[
+            pixel_goal[0, 0] - 1 : pixel_goal[0, 0] + 1,
+            pixel_goal[0, 1] - 1 : pixel_goal[0, 1] + 1,
+            :,
+        ] = torch.ones(1, 3)
+        draw = True
+    if gt_pixel_goal[0, 0] > 0:
+        # plot gt_goal
+        viz_image[
+            gt_pixel_goal[0, 0] - 1 : gt_pixel_goal[0, 0] + 1,
+            gt_pixel_goal[0, 1] - 1 : gt_pixel_goal[0, 1] + 1,
+            :,
+        ] = torch.tensor([1.0, 1.0, 0.0]).view(1, 3)
+        draw = True
+    if draw:
+        plt.imshow(viz_image)
+        wandb.log({f"{what}/goal_viz": plt}, step=index)
 
 
 def train_policy_net_mpur(
@@ -526,7 +541,7 @@ def train_policy_net_mpur(
             goal_predictor_cost = torch.tensor(0.0).to(gt_goal.device)
         if index % 100 == 0 and t == 0:
             visualize_goal_input(
-                input_images, current_goal, index, s_std=model.stats["s_std"]
+                "train", input_images, current_goal, gt_goal, index, s_std=model.stats["s_std"]
             )
         actions, _, _, _ = model.policy_net(
             input_images, input_states, goals=current_goal

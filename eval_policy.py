@@ -97,12 +97,9 @@ def load_models(opt, data_path, device="cuda"):
             if isinstance(v, torch.Tensor):
                 forward_model.policy_net.stats[k] = v.to(device)
 
-    # forward_model = forward_model.share_memory()
     if forward_model.goal_policy_net:
         forward_model.goal_policy_net.stats = forward_model.policy_net.stats
 
-    if "ten" in opt.mfile:
-        forward_model.p_z = torch.load(path.join(opt.model_dir, f"{opt.mfile}.pz"))
     return (
         forward_model,
         value_function,
