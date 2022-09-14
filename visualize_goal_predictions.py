@@ -29,15 +29,15 @@ def visualize_goal_predictions(model, batch, goal_stats, index, goal_distance=5)
     if goal_stats is not None:
         # unnormalize goal predictions
         current_goal = ((current_goal * goal_stats[1]) + goal_stats[0]).squeeze()
+    import ipdb
+
+    ipdb.set_trace()
     visualize_goal_input(
-        "eval", input_images, current_goal, gt_goal, index, s_std=model.stats["s_std"]
+        "eval", input_images, current_goal, gt_goal.squeeze(), index, s_std=model.stats["s_std"]
     )
 
 
 def main():
-    import ipdb
-
-    ipdb.set_trace()
     opt = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

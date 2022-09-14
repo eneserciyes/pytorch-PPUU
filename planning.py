@@ -461,19 +461,19 @@ def visualize_goal_input(
     gt_pixel_goal = goal_to_pixel_goal(gt_goal, centre_pixel, s_std)
 
     draw = False
-    if pixel_goal[0, 0] > 0:
+    if pixel_goal[0] > 0:
         # plot pixel goal
         viz_image[
-            pixel_goal[0, 0] - 1 : pixel_goal[0, 0] + 1,
-            pixel_goal[0, 1] - 1 : pixel_goal[0, 1] + 1,
+            pixel_goal[0] - 1 : pixel_goal[0] + 1,
+            pixel_goal[1] - 1 : pixel_goal[1] + 1,
             :,
         ] = torch.ones(1, 3)
         draw = True
-    if gt_pixel_goal[0, 0] > 0:
+    if gt_pixel_goal[0] > 0:
         # plot gt_goal
         viz_image[
-            gt_pixel_goal[0, 0] - 1 : gt_pixel_goal[0, 0] + 1,
-            gt_pixel_goal[0, 1] - 1 : gt_pixel_goal[0, 1] + 1,
+            gt_pixel_goal[0] - 1 : gt_pixel_goal[0] + 1,
+            gt_pixel_goal[1] - 1 : gt_pixel_goal[1] + 1,
             :,
         ] = torch.tensor([1.0, 1.0, 0.0]).view(1, 3)
         draw = True
