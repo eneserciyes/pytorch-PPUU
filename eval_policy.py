@@ -239,9 +239,7 @@ def parse_args():
     parser.add_argument(
         "-save_grad_vid", action="store_true", help="save gradients wrt states"
     )
-    parser.add_argument(
-        "-save_ego_movie", action="store_true", help="save ego movie"
-    )
+    parser.add_argument("-save_ego_movie", action="store_true", help="save ego movie")
 
     opt = parser.parse_args()
     opt.save_dir = path.join(opt.model_dir, "planning_results")
@@ -428,8 +426,14 @@ def process_one_episode(
                     ((torch.tensor(a[t]) - data_stats["a_mean"]) / data_stats["a_std"])
                 )
                 if current_goal is not None:
-                    current_goal_normalized = current_goal.cpu() * data_stats["s_std"][:2]
-                    goals.append(torch.tensor([current_goal_normalized[1], current_goal_normalized[0]]))
+                    current_goal_normalized = (
+                        current_goal.cpu() * data_stats["s_std"][:2]
+                    )
+                    goals.append(
+                        torch.tensor(
+                            [current_goal_normalized[1], current_goal_normalized[0]]
+                        )
+                    )
                 if mu is not None:
                     mu_list.append(mu.data.cpu().numpy())
                     std_list.append(std.data.cpu().numpy())
@@ -573,6 +577,12 @@ def main():
     time_started = time.time()
     total_images = 0
 
+    wandb.define_metric("ByEpisode/Success", summary="mean")
+    wandb.define_metric("ByEpisode/Collision", summary="mean")
+    wandb.define_metric("ByEpisode/OffScreen", summary="mean")
+    wandb.define_metric("ByEpisode/Distance", summary="mean")
+    wandb.define_metric("ByEpisode/Time", summary="mean")
+
     if opt.num_processes > 0:
         set_start_method("spawn")
         pool = Pool(opt.num_processes)
@@ -593,7 +603,7 @@ def main():
                         plan_file,
                         j,
                         car_sizes,
-                        goal_stats
+                        goal_stats,
                     ),
                 )
             )
@@ -615,7 +625,7 @@ def main():
                 plan_file,
                 j,
                 car_sizes,
-                goal_stats
+                goal_stats,
             )
 
         time_travelled.append(simulation_result.time_travelled)
@@ -651,6 +661,7 @@ def main():
         )(simulation_result.cost_sequence).mean()
 
         # TODO: add goal cost mean here
+
         wandb.log(
             {
                 "ByEpisode/Success": simulation_result.road_completed,
