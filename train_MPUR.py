@@ -77,7 +77,9 @@ if opt.value_model != "":
 if opt.train_policy == "low_level":
     # Create policy
     model.create_policy_net(opt)
-    optimizer = optim.Adam(model.policy_net.parameters(), opt.lrt)  # POLICY optimiser ONLY!
+    optimizer = optim.Adam(
+        model.policy_net.parameters(), opt.lrt
+    )  # POLICY optimiser ONLY!
 elif opt.train_policy == "goal":
     assert model.policy_net, "policy net is not trained"
     model.create_goal_net(opt)
@@ -86,6 +88,9 @@ elif opt.train_policy == "goal":
 # Load normalisation stats
 stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
 model.stats = stats  # used by planning.py/compute_uncertainty_batch
+
+# Load goal normalisation stats
+goal_stats = torch.load("goal_stats.pth")
 
 # Send to GPU if possible
 model.to(opt.device)
@@ -133,6 +138,7 @@ def start(what, nbatches, npred, epoch):
             car_sizes,
             goal_distance=opt.goal_distance,
             goal_rollout_len=opt.goal_rollout_len,
+            goal_stats=goal_stats,
             index=(epoch * nbatches) + j,
             n_models=10,
             lrt_z=opt.lrt_z,
@@ -150,7 +156,9 @@ def start(what, nbatches, npred, epoch):
             + opt.lambda_gp * pred["goal_predictor"]
         )
 
-        updated_model = model.goal_policy_net if opt.train_policy == 'goal' else model.policy_net
+        updated_model = (
+            model.goal_policy_net if opt.train_policy == "goal" else model.policy_net
+        )
         if not math.isnan(pred["policy"].item()):
             if train:
                 optimizer.zero_grad()
@@ -292,4 +300,3 @@ for i in range(250):
         opt.lambda_l = 0.2
         opt.lambda_g = 0.0
         opt.lambda_p = 1.0
-

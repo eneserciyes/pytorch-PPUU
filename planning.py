@@ -489,6 +489,7 @@ def train_policy_net_mpur(
     car_sizes,
     goal_distance,
     goal_rollout_len,
+    goal_stats,
     index,
     n_models=10,
     sampling_method="fp",
@@ -535,13 +536,20 @@ def train_policy_net_mpur(
         gt_goal = get_goal(current_position, goal_list) - current_position
         if model.goal_policy_net:
             current_goal, _, _, _ = model.goal_policy_net(input_images, input_states)
+            # unnormalize current goal
+            current_goal = (current_goal * goal_stats[1]) + goal_stats[0]
             goal_predictor_cost = torch.nn.functional.mse_loss(current_goal, gt_goal)
         else:
             current_goal = gt_goal
             goal_predictor_cost = torch.tensor(0.0).to(gt_goal.device)
         if index % 100 == 0 and t == 0:
             visualize_goal_input(
-                "train", input_images, current_goal, gt_goal, index, s_std=model.stats["s_std"]
+                "train",
+                input_images,
+                current_goal,
+                gt_goal,
+                index,
+                s_std=model.stats["s_std"],
             )
         actions, _, _, _ = model.policy_net(
             input_images, input_states, goals=current_goal
