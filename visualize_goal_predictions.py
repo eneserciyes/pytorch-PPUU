@@ -65,7 +65,7 @@ def main():
     wandb.config.update(opt)
 
     for i in range(100):
-        batch = dataloader.get_batch_fm("train", npred=opt.npred)
+        batch = dataloader.get_batch_fm("valid", npred=opt.npred)
         visualize_goal_predictions(
             model=forward_model, batch=batch, goal_stats=goal_stats, index=i
         )
