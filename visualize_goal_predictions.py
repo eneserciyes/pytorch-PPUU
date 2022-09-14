@@ -67,7 +67,7 @@ def main():
     for i in range(100):
         batch = dataloader.get_batch_fm("valid", npred=opt.npred)
         visualize_goal_predictions(
-            model=forward_model, batch=batch, goal_stats=goal_stats, index=i
+            model=forward_model, batch=batch, goal_stats=None, index=i
         )
 
 
