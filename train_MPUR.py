@@ -68,11 +68,6 @@ if not hasattr(model.encoder, "n_channels"):
 
 model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
 model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
-if opt.value_model != "":
-    value_function = torch.load(
-        path.join(opt.model_dir, "value_functions", opt.value_model)
-    ).to(opt.device)
-    model.value_function = value_function
 
 if opt.train_policy == "low_level":
     # Create policy
