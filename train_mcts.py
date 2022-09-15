@@ -1,30 +1,54 @@
+import argparse
 import math
-from collections import OrderedDict
 from typing import List, Tuple
 
 import numpy as np
 import os
-import ipdb
 import random
 import torch
 import torch.optim as optim
 from os import path
-import wandb
 import tqdm
 
 import planning
-import utils
 from dataloader import DataLoader
 from models import FwdCNN_VAE
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+
+def parse_command_line():
+    parser = argparse.ArgumentParser()
+    # model loading options
+    parser.add_argument("-seed", type=int, default=1)
+    parser.add_argument("-name", type=str)
+    parser.add_argument("-dataset", type=str, default="i80")
+    parser.add_argument("-pydevd", action="store_true")
+    parser.add_argument(
+        "-mfile",
+        type=str,
+        help="full model used to train with the MCTS",
+    )
+    parser.add_argument("-u_hinge", type=float, default=0.5)
+    parser.add_argument("-epoch_size", type=int, default=500)
+
+    # MCTS options
+    parser.add_argument("-root_diriclet_alpha", type=float, default=0.25)
+    parser.add_argument("-root_exploration_fraction", type=float, default=0.25)
+    parser.add_argument("-num_simulations", type=int, default=50)
+    parser.add_argument("-pb_c_base", type=float, default=19652)
+    parser.add_argument("-pb_c_init", type=float, default=1.25)
+    parser.add_argument("-gamma", type=float, default=0.99)
+
+    return parser.parse_args()
+
+
 #################################################
 # Train a policy / controller
 #################################################
 
-opt = utils.parse_command_line()
+opt = parse_command_line()
 
 if opt.pydevd:
     import pydevd_pycharm
@@ -34,8 +58,8 @@ if opt.pydevd:
     )
 
 # Create file_name
-opt.model_file = path.join(opt.model_dir, "policy_networks", "MPUR-" + opt.policy)
-utils.build_model_file_name(opt)
+opt.model_file = path.join(opt.model_dir, "policy_networks", "MCTS-MPUR-")
+opt.model_file += f"-name={opt.name}"
 
 os.system("mkdir -p " + path.join(opt.model_dir, "policy_networks"))
 
@@ -44,29 +68,18 @@ np.random.seed(opt.seed)
 torch.manual_seed(opt.seed)
 
 # Define default device
-opt.device = torch.device(
-    "cuda" if torch.cuda.is_available() and not opt.no_cuda else "cpu"
-)
-if torch.cuda.is_available() and opt.no_cuda:
-    print(
-        "WARNING: You have a CUDA device, so you should probably run without -no_cuda"
-    )
+opt.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # load the model
 
 model_path = path.join(opt.model_dir, opt.mfile)
 if path.exists(model_path):
     model = torch.load(model_path)
-elif path.exists(opt.mfile):
-    model = torch.load(opt.mfile)
 else:
     raise RuntimeError(f"couldn't find file {opt.mfile}")
 
 if type(model) is dict:
     model = model["model"]
-
-if not hasattr(model.encoder, "n_channels"):
-    model.encoder.n_channels = 3
 
 model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
 model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
@@ -77,7 +90,6 @@ assert hasattr(model, "value_net"), "Model must have a value network."
 assert hasattr(model, "cost"), "Model must have a cost network."
 
 optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
-
 
 # Load normalisation stats
 stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
@@ -258,12 +270,12 @@ def preprocess_inputs(inputs):
     return input_images, input_states_orig, input_ego_car_orig[:, :1]
 
 
-def train(config, nbatches, npred):
-    for j in tqdm.tqdm(range(nbatches)):
+def train(config, epoch_size, npred):
+    for j in tqdm.tqdm(range(epoch_size)):
         import ipdb
 
         ipdb.set_trace()
-        inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(
+        inputs, actions, targets, _, _ = dataloader.get_batch_fm(
             "train", npred
         )
 
@@ -272,6 +284,10 @@ def train(config, nbatches, npred):
 
         # start search
         root = Node(root=True)
+        root.image = input_images,
+        root.input_states = input_states,
+        root.ego_car = input_ego_car
+        
         root.expand()
         root.add_exploration_noise(
             config.root_diriclet_alpha, config.root_exploration_fraction
@@ -280,3 +296,4 @@ def train(config, nbatches, npred):
 
 
 print("[training]")
+train(opt, opt.epoch_size, opt.npred)
