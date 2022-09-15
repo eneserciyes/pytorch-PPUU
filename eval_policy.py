@@ -97,7 +97,7 @@ def load_models(opt, data_path, device="cuda"):
             if isinstance(v, torch.Tensor):
                 forward_model.policy_net.stats[k] = v.to(device)
 
-    if forward_model.goal_policy_net:
+    if hasattr(forward_model, "goal_policy_net"):
         forward_model.goal_policy_net.stats = forward_model.policy_net.stats
 
     return (
@@ -298,12 +298,14 @@ def process_one_episode(
     cost_sequence, action_sequence, state_sequence = [], [], []
     has_collided = False
     off_screen = False
+    import ipdb
+    ipdb.set_trace()
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
         if not forward_model.goal_policy_net:
             current_goal = env.ghost.get_state()[:2] if env.ghost else None
-        elif forward_model.goal_policy_net:
+        else:
             current_goal, _, _, _ = forward_model.goal_policy_net(
                 input_images.cuda(),
                 input_states.cuda(),
