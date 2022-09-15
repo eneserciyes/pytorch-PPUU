@@ -298,12 +298,11 @@ def process_one_episode(
     cost_sequence, action_sequence, state_sequence = [], [], []
     has_collided = False
     off_screen = False
-    import ipdb
-    ipdb.set_trace()
+
     while not done:
         input_images = inputs["context"].contiguous()
         input_states = inputs["state"].contiguous()
-        if not forward_model.goal_policy_net:
+        if not hasattr(forward_model, "goal_policy_net"):
             current_goal = env.ghost.get_state()[:2] if env.ghost else None
         else:
             current_goal, _, _, _ = forward_model.goal_policy_net(
@@ -375,7 +374,7 @@ def process_one_episode(
                 sample=True,
                 normalize_inputs=True,
                 normalize_outputs=True,
-                normalize_goals=(not forward_model.goal_policy_net),
+                normalize_goals=(not hasattr(forward_model, "goal_policy_net")),
             )
             a = a.cpu().view(1, 2).numpy()
         elif opt.method == "bprop+policy-IL":
@@ -569,7 +568,11 @@ def main():
     action_sequences, state_sequences, cost_sequences = [], [], []
 
     run_name = "eval_" + opt.name if opt.name else None
-    wandb.init(project="mpur-ppuu", name=run_name)
+    wandb.init(
+        project="mpur-ppuu",
+        name=run_name,
+        mode="offline" if opt.name == "debug" else "online",
+    )
     wandb.config.update(opt)
 
     n_test = len(splits["test"])
