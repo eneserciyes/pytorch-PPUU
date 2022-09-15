@@ -76,8 +76,8 @@ assert hasattr(model, "policy_net"), "Model must have a low level policy net."
 assert hasattr(model, "value_net"), "Model must have a value network."
 assert hasattr(model, "cost"), "Model must have a cost network."
 
-model.create_value_net(opt)
 optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
+
 
 # Load normalisation stats
 stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
