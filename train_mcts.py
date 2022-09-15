@@ -1,8 +1,8 @@
 import math
 from collections import OrderedDict
-from typing import Tuple
+from typing import List, Tuple
 
-import numpy
+import numpy as np
 import os
 import ipdb
 import random
@@ -15,6 +15,7 @@ import tqdm
 import planning
 import utils
 from dataloader import DataLoader
+from models import FwdCNN_VAE
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -39,7 +40,7 @@ utils.build_model_file_name(opt)
 os.system("mkdir -p " + path.join(opt.model_dir, "policy_networks"))
 
 random.seed(opt.seed)
-numpy.random.seed(opt.seed)
+np.random.seed(opt.seed)
 torch.manual_seed(opt.seed)
 
 # Define default device
@@ -72,7 +73,8 @@ model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_bat
 
 assert hasattr(model, "goal_policy_net"), "Model must have a goal policy net."
 assert hasattr(model, "policy_net"), "Model must have a low level policy net."
-# assert hasattr(model, "value_net"), "Model must have a value network."
+assert hasattr(model, "value_net"), "Model must have a value network."
+assert hasattr(model, "cost"), "Model must have a cost network."
 
 model.create_value_net(opt)
 optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
@@ -119,8 +121,12 @@ class Node:
         self.root = root
         self.image = None
         self.state = None
+        self.ego_car = None
         self.visit_count = 0
         self.value_sum = 0
+        self.children_sample_count = 20
+        self.goal_distance = 5
+        self.reward = 0
         self.children = {}
 
     def expanded(self) -> bool:
@@ -131,37 +137,90 @@ class Node:
             return 0
         return self.value_sum / self.visit_count
 
-    def expand(self, model, exploration_noise=False):
-        # TODO: sample goals
-        # TODO: add exploration noise
-        # TODO: rollout to create the children nodes
-        pass
+    def expand(self, model: FwdCNN_VAE) -> None:
+        goals = model.goal_policy_net(
+            self.image, self.state, n_samples=self.children_sample_count
+        )  # self.children_sample_count x goal_dimension
+
+        for goal in goals:
+            next_image, next_state, next_ego_car = rollout(
+                model=model,
+                input_images=self.image,
+                input_states=self.state,
+                input_ego_car=self.ego_car,
+                init_goals=goal,
+                nsteps=self.goal_distance,
+            )
+            child_node = Node()
+            child_node.image, child_node.state, child_node.ego_car = (
+                next_image,
+                next_state,
+                next_ego_car,
+            )
+            reward = model.cost(next_image, next_state)
+            model.reward = 1 / (1e6 + reward)
+            self.children[goal] = child_node
+
+    def add_exploration_noise(self, dirichlet_alpha, exploration_fraction):
+        actions = list(self.children.keys())
+        noise = np.random.dirichlet([dirichlet_alpha] * len(actions))
+        frac = exploration_fraction
+        for a, n in zip(actions, noise):
+            self.children[a].state = self.children[a].state * (1 - frac) + n * frac
 
 
 class MCTS:
-    def __init__(self, config, exploration=False):
+    def __init__(self, config):
         self.config = config
-        self.exploration = exploration
 
     def run(self, root, model, num_simulations=50):
         min_max_stats = MinMaxStats()
         for _ in range(num_simulations):
-            node = root
+            node: Node = root
             search_path = [node]
             while node.expanded():
-                action_cap, node = self.select_child(model, node, min_max_stats)
+                node = self.select_child(node, min_max_stats)
                 search_path.append(node)
+            node.expand(model)
+            value = model.value_net(node.image, node.state)
+            self.backpropagate(search_path, value.item(), min_max_stats)
 
-
-
-    def select_child(self, model, node, min_max_stats):
+    def select_child(self, node, min_max_stats) -> Node:
         # TODO: return goal and nodes
-        return None, None
+
+        _, child = max(
+            (self.ucb_score(node, child, min_max_stats), child)
+            for _, child in node.children().items()
+        )
+        return child
+
+    def ucb_score(self, parent, child, min_max_stats) -> float:
+        pb_c = math.log(
+            (parent.visit_count + self.config.pb_c_base + 1) / self.config.pb_c_base
+        )
+        pb_c += self.config.pb_c_init
+        pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + 1)
+
+        prior_score = pb_c * child.prior
+        value_score = min_max_stats.normalize(child.value())
+
+        return prior_score + value_score
+
+    def backpropagate(
+        self, search_path: List[Node], value: float, min_max_stats: MinMaxStats
+    ):
+        for node in search_path:
+            node.value_sum += value
+            node.visit_count += 1
+            min_max_stats.update(node.value())
+
+            value = node.reward + self.config.gamma * value
 
 
 def rollout(
-    input_images, input_states, input_ego_car, init_goals, nsteps=5
+    model, input_images, input_states, input_ego_car, init_goals, nsteps=5
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    # TODO: return ego car separately
     Z = model.sample_z(nsteps, method="fp")
     Z = Z.view(nsteps, 1, -1)
 
@@ -199,8 +258,11 @@ def preprocess_inputs(inputs):
     return input_images, input_states_orig, input_ego_car_orig[:, :1]
 
 
-def train(nbatches, npred):
+def train(config, nbatches, npred):
     for j in tqdm.tqdm(range(nbatches)):
+        import ipdb
+
+        ipdb.set_trace()
         inputs, actions, targets, ids, car_sizes = dataloader.get_batch_fm(
             "train", npred
         )
@@ -209,6 +271,12 @@ def train(nbatches, npred):
         input_images, input_states, input_ego_car = preprocess_inputs(inputs)
 
         # start search
+        root = Node(root=True)
+        root.expand()
+        root.add_exploration_noise(
+            config.root_diriclet_alpha, config.root_exploration_fraction
+        )
+        MCTS(config).run(root, model, num_simulations=config.num_simulations)
 
 
 print("[training]")
