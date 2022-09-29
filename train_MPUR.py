@@ -212,21 +212,15 @@ losses = OrderedDict(
     gp="goal_predictor",
 )
 
-# writer = utils.create_tensorboard_writer(opt)
 run_name = opt.name if opt.name else None
 wandb.init(
-    project="goal_predictor_mpur",
+    project="goal_predictor_mpur" if opt.train_policy == "goal" else "mpur-ppuu",
     name=run_name,
     mode="offline" if opt.name == "debug" else "online",
 )
 wandb.config.update(opt)
 
 best_loss = float("inf")
-# set task costs to 0 at first
-opt.lambda_l = 0.0
-opt.lambda_g = 0.0
-opt.lambda_p = 0.0
-opt.lambda_gp = 1.0
 
 for i in range(250):
     n_iter += opt.epoch_size
@@ -297,10 +291,3 @@ for i in range(250):
         os.system(f"set -k; {eval_submit_script}")
 
     model.to(opt.device)
-
-    # set the curriculum
-    if i == 100:
-        opt.lambda_gp = 0.0
-        opt.lambda_l = 0.2
-        opt.lambda_g = 0.0
-        opt.lambda_p = 1.0

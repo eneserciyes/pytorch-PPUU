@@ -113,7 +113,7 @@ def train_goal_bc(what, inputs, targets, goal_distance, index):
         # unnormalized is still normalized from actual coordinates
         unnormalized_goal_pred = unnormalize_goal(current_goal)
         planning.visualize_goal_input(
-            what, input_images, current_goal, index, s_std=model.stats["s_std"]
+            what, input_images, current_goal, gt_goal, index, s_std=model.stats["s_std"]
         )
     return goal_predictor_cost
 
