@@ -22,16 +22,27 @@ def parse_command_line():
     parser = argparse.ArgumentParser()
     # model loading options
     parser.add_argument("-seed", type=int, default=1)
-    parser.add_argument("-name", type=str)
-    parser.add_argument("-dataset", type=str, default="i80")
+    parser.add_argument("-name", type=str, default="debug")
     parser.add_argument("-pydevd", action="store_true")
     parser.add_argument(
         "-mfile",
         type=str,
         help="full model used to train with the MCTS",
+        default="best_with_value_net_with_goal_policy_net.model",
+    )
+    parser.add_argument(
+        "-model_dir", type=str, help="path to model directory", default="models/"
     )
     parser.add_argument("-u_hinge", type=float, default=0.5)
     parser.add_argument("-epoch_size", type=int, default=500)
+    parser.add_argument("-lrt", type=float, default=0.0001, help="learning rate")
+
+    # Dataset options
+    parser.add_argument("-debug", action="store_true")
+    parser.add_argument("-dataset", type=str, default="i80")
+    parser.add_argument("-batch_size", type=int, default=1)
+    parser.add_argument("-ncond", type=int, default=20)
+    parser.add_argument("-npred", type=int, default=30)
 
     # MCTS options
     parser.add_argument("-root_diriclet_alpha", type=float, default=0.25)
@@ -41,73 +52,75 @@ def parse_command_line():
     parser.add_argument("-pb_c_init", type=float, default=1.25)
     parser.add_argument("-gamma", type=float, default=0.99)
 
+    # Cost options
+    parser.add_argument("-lambda_l", type=float, default=0.2)
+    parser.add_argument("-lambda_p", type=float, default=1.0)
+    parser.add_argument("-lambda_g", type=float, default=1.0)
+    parser.add_argument("-lambda_gp", type=float, default=1.0)
+    parser.add_argument("-lambda_o", type=float, default=0.0)
+
     return parser.parse_args()
 
 
 #################################################
 # Train a policy / controller
 #################################################
+def setup():
+    opt = parse_command_line()
 
-opt = parse_command_line()
+    # Create file_name
+    opt.model_file = path.join(opt.model_dir, "policy_networks", "MCTS-MPUR-")
+    opt.model_file += f"-name={opt.name}"
 
-if opt.pydevd:
-    import pydevd_pycharm
+    os.system("mkdir -p " + path.join(opt.model_dir, "MCTS_networks"))
 
-    pydevd_pycharm.settrace(
-        "localhost", port=5724, stdoutToServer=True, stderrToServer=True
+    random.seed(opt.seed)
+    np.random.seed(opt.seed)
+    torch.manual_seed(opt.seed)
+
+    # Define default device
+    opt.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # load the model
+
+    model_path = path.join(opt.model_dir, opt.mfile)
+    if path.exists(model_path):
+        model = torch.load(model_path)
+    else:
+        raise RuntimeError(f"couldn't find file {opt.mfile}")
+
+    if type(model) is dict:
+        model = model["model"]
+
+    model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
+    model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
+
+    assert hasattr(model, "goal_policy_net"), "Model must have a goal policy net."
+    assert hasattr(model, "policy_net"), "Model must have a low level policy net."
+    assert hasattr(model, "value_net"), "Model must have a value network."
+    assert hasattr(model, "cost"), "Model must have a cost network."
+
+    optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
+
+    # Load normalisation stats
+    stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
+    model.stats = stats  # used by planning.py/compute_uncertainty_batch
+
+    # Send to GPU if possible
+    model.to(opt.device)
+    model.policy_net.stats_d = {}
+    for k, v in stats.items():
+        if isinstance(v, torch.Tensor):
+            model.policy_net.stats_d[k] = v.to(opt.device)
+
+    dataloader = DataLoader(None, opt, opt.dataset)
+    model.train()
+    model.opt.u_hinge = opt.u_hinge
+    planning.estimate_uncertainty_stats(
+        model, dataloader, n_batches=50, npred=opt.npred
     )
-
-# Create file_name
-opt.model_file = path.join(opt.model_dir, "policy_networks", "MCTS-MPUR-")
-opt.model_file += f"-name={opt.name}"
-
-os.system("mkdir -p " + path.join(opt.model_dir, "policy_networks"))
-
-random.seed(opt.seed)
-np.random.seed(opt.seed)
-torch.manual_seed(opt.seed)
-
-# Define default device
-opt.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# load the model
-
-model_path = path.join(opt.model_dir, opt.mfile)
-if path.exists(model_path):
-    model = torch.load(model_path)
-else:
-    raise RuntimeError(f"couldn't find file {opt.mfile}")
-
-if type(model) is dict:
-    model = model["model"]
-
-model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
-model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
-
-assert hasattr(model, "goal_policy_net"), "Model must have a goal policy net."
-assert hasattr(model, "policy_net"), "Model must have a low level policy net."
-assert hasattr(model, "value_net"), "Model must have a value network."
-assert hasattr(model, "cost"), "Model must have a cost network."
-
-optimizer = optim.Adam(model.goal_policy_net.parameters(), opt.lrt)
-
-# Load normalisation stats
-stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
-model.stats = stats  # used by planning.py/compute_uncertainty_batch
-
-# Send to GPU if possible
-model.to(opt.device)
-model.policy_net.stats_d = {}
-for k, v in stats.items():
-    if isinstance(v, torch.Tensor):
-        model.policy_net.stats_d[k] = v.to(opt.device)
-
-
-dataloader = DataLoader(None, opt, opt.dataset)
-model.train()
-model.opt.u_hinge = opt.u_hinge
-planning.estimate_uncertainty_stats(model, dataloader, n_batches=50, npred=opt.npred)
-model.eval()
+    model.eval()
+    return opt, dataloader, model, optimizer
 
 
 class MinMaxStats(object):
@@ -129,7 +142,7 @@ class MinMaxStats(object):
 
 
 class Node:
-    def __init__(self, root=False):
+    def __init__(self, root=False, dirichlet_alpha=None, exploration_fraction=None):
         self.root = root
         self.image = None
         self.state = None
@@ -139,6 +152,8 @@ class Node:
         self.children_sample_count = 20
         self.goal_distance = 5
         self.reward = 0
+        self.dirichlet_alpha = dirichlet_alpha
+        self.exploration_fraction = exploration_fraction
         self.children = {}
 
     def expanded(self) -> bool:
@@ -150,12 +165,23 @@ class Node:
         return self.value_sum / self.visit_count
 
     def expand(self, model: FwdCNN_VAE) -> None:
-        goals = model.goal_policy_net(
+        goals, _, _, _ = model.goal_policy_net(
             self.image, self.state, n_samples=self.children_sample_count
         )  # self.children_sample_count x goal_dimension
 
+        if self.dirichlet_alpha is not None:
+            # add exploration noise to the goals
+            # TODO: tune exploration noise hyperparameters
+            noise = np.random.dirichlet(
+                [self.dirichlet_alpha] * self.children_sample_count
+            )
+            goals = (
+                goals * (1 - self.exploration_fraction)
+                + noise * self.exploration_fraction
+            )
+
         for goal in goals:
-            next_image, next_state, next_ego_car = rollout(
+            next_image, next_state = rollout(
                 model=model,
                 input_images=self.image,
                 input_states=self.state,
@@ -167,10 +193,10 @@ class Node:
             child_node.image, child_node.state, child_node.ego_car = (
                 next_image,
                 next_state,
-                next_ego_car,
+                self.ego_car,
             )
-            reward = model.cost(next_image, next_state)
-            model.reward = 1 / (1e6 + reward)
+            cost = model.cost(next_image, next_state)
+            model.reward = 1 / (1e6 + cost)
             self.children[goal] = child_node
 
     def add_exploration_noise(self, dirichlet_alpha, exploration_fraction):
@@ -232,7 +258,6 @@ class MCTS:
 def rollout(
     model, input_images, input_states, input_ego_car, init_goals, nsteps=5
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    # TODO: return ego car separately
     Z = model.sample_z(nsteps, method="fp")
     Z = Z.view(nsteps, 1, -1)
 
@@ -253,11 +278,11 @@ def rollout(
             a,
             z_t,
         )
-        pred_image = torch.cat((pred_image, input_ego_car), dim=2)
+        pred_image = torch.cat((pred_image, input_ego_car.unsqueeze(0)), dim=2)
         input_images = torch.cat((input_images[:, 1:], pred_image), 1)
         input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
-    return pred_image, pred_state
+    return pred_image[:, :, :3], pred_state
 
 
 def preprocess_inputs(inputs):
@@ -270,30 +295,28 @@ def preprocess_inputs(inputs):
     return input_images, input_states_orig, input_ego_car_orig[:, :1]
 
 
-def train(config, epoch_size, npred):
+def train(dataloader, model, optimizer, config, epoch_size, npred):
     for j in tqdm.tqdm(range(epoch_size)):
-        import ipdb
-
-        ipdb.set_trace()
-        inputs, actions, targets, _, _ = dataloader.get_batch_fm(
-            "train", npred
-        )
+        inputs, actions, targets, _, _ = dataloader.get_batch_fm("train", npred)
 
         # do preprocessing
-        input_images, input_states, input_ego_car = preprocess_inputs(inputs)
+        input_image, input_state, input_ego_car = preprocess_inputs(inputs)
 
         # start search
         root = Node(root=True)
-        root.image = input_images,
-        root.input_states = input_states,
+        root.image = input_image
+        root.state = input_state
         root.ego_car = input_ego_car
-        
-        root.expand()
+
+        root.expand(model)
         root.add_exploration_noise(
             config.root_diriclet_alpha, config.root_exploration_fraction
         )
         MCTS(config).run(root, model, num_simulations=config.num_simulations)
 
 
-print("[training]")
-train(opt, opt.epoch_size, opt.npred)
+if __name__ == "__main__":
+    OPT, DATALOADER, MODEL, OPTIMIZER = setup()
+    print("[training]")
+
+    train(DATALOADER, MODEL, OPTIMIZER, OPT, OPT.epoch_size, OPT.npred)
