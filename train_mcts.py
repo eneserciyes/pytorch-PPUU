@@ -3,6 +3,7 @@ import math
 from typing import List, Dict, NamedTuple, Tuple
 from os import path
 import tqdm
+from operator import itemgetter
 
 import numpy as np
 import os
@@ -96,6 +97,7 @@ def setup():
         model = model["model"]
 
     model.opt.lambda_l = opt.lambda_l  # used by planning.py/compute_uncertainty_batch
+    model.opt.lambda_p = opt.lambda_p  # used by FwdCNN_VAE.reward()
     model.opt.lambda_o = opt.lambda_o  # used by planning.py/compute_uncertainty_batch
 
     assert hasattr(model, "goal_policy_net"), "Model must have a goal policy net."
@@ -108,6 +110,9 @@ def setup():
     # Load normalisation stats
     stats = torch.load("traffic-data/state-action-cost/data_i80_v0/data_stats.pth")
     model.stats = stats  # used by planning.py/compute_uncertainty_batch
+
+    goal_stats = torch.load("goal_stats.pth").to(opt.device)
+    model.goal_stats = goal_stats
 
     # Send to GPU if possible
     model.to(opt.device)
@@ -196,45 +201,25 @@ class Node:
         _mu = actor_output.mu.repeat(1, proposal_action_sample_n).reshape(
             proposal_action_sample_n, actor_output.mu.shape[1]
         )
-        _std = actor_output.std_dev.repeat(1, proposal_action_sample_n).reshape(
-            proposal_action_sample_n, actor_output.std_dev.shape[1]
+        _std = actor_output.std.repeat(1, proposal_action_sample_n).reshape(
+            proposal_action_sample_n, actor_output.std.shape[1]
         )
         _actor_output = ActorOutput(_mu, _std)
-
+        # TODO: don't unnormalize until here
         goal_policy_dist = model.goal_policy_net.action_dist(_actor_output)
         _goals = model.goal_policy_net.action_sample(_actor_output)
-        noise_dist = Normal(
-            torch.zeros(_goals.shape).to(_goals.device),
-            torch.ones(_goals.shape).to(_goals.device) * 0.3,
-        )
-        _goals = _goals + noise_dist.sample()
+        # TODO: tune noise_dist
+        # noise_dist = Normal(
+        #     torch.zeros(_goals.shape).to(_goals.device),
+        #     torch.ones(_goals.shape).to(_goals.device) * 0.3,
+        # )
+        # _goals = _goals + noise_dist.sample()
 
         child_goal_log_prob = -goal_policy_dist.entropy(_goals)
 
         for child_goal in _goals:
             self.children[child_goal] = Node(0)
         self.update_prior()
-
-        # for goal in goals:
-        #     next_image, next_state = rollout(
-        #         model=model,
-        #         input_images=self.image,
-        #         input_states=self.state,
-        #         input_ego_car=self.ego_car,
-        #         init_goals=goal,
-        #         nsteps=self.goal_distance,
-        #     )
-        #     child_node = Node()
-        #     child_node.image, child_node.state, child_node.ego_car = (
-        #         next_image,
-        #         next_state,
-        #         self.ego_car,
-        #     )
-        #     cost = model.cost(next_image, next_state)
-        #     # 0: proximity_cost, 1:lane_cost
-        #     cost = self.lambda_p * cost[:, 0] + self.lambda_l * cost[:, 1]
-        #     child_node.reward = 1 / (1e-6 + cost)
-        #     self.children[goal] = child_node
 
     def update_prior(self):
         exp_sum = sum(
@@ -269,25 +254,33 @@ class MCTS:
 
             parent = search_path[-2]
             image, state, ego_car = parent.state
-            next_image, next_state, next_ego_car = rollout(model, image, state, ego_car, goal)
+            next_image, next_state, next_ego_car = rollout(
+                model, image, state, ego_car, goal
+            )
 
             _, _, mu, std = model.goal_policy_net(next_image, next_state)
             actor_output = ActorOutput(mu, std)
-            value = model.value_net(next_image, next_state)
+            # TODO: check if value net is correct like this
+            value, _, _, _ = model.value_net(next_image, next_state)
             goal = model.goal_policy_net.action_sample(actor_output)
-            reward = model.reward(next_image, next_state)
+            reward = model.reward(next_image[:, -1, :3].view(-1, 3, 117, 24), next_state[:, -1].view(-1, 4))
 
-            node.expand(model, actor_output, state=(next_image, next_state, next_ego_car), reward=reward.item())
+            node.expand(
+                model,
+                actor_output,
+                state=(next_image, next_state, next_ego_car),
+                reward=reward.item(),
+            )
             self.backpropagate(search_path, value.item(), min_max_stats)
 
     def select_child(self, node: Node, min_max_stats) -> Node:
         # TODO: return goal and nodes
 
-        _, child = max(
-            (self.ucb_score(node, child, min_max_stats), child)
-            for _, child in node.children.items()
+        _, goal, child = max(
+            [(self.ucb_score(node, child, min_max_stats), goal, child)
+            for goal, child in node.children.items()], key=itemgetter(0)
         )
-        return child
+        return goal, child
 
     def ucb_score(self, parent, child, min_max_stats) -> float:
         pb_c = math.log(
@@ -339,7 +332,7 @@ def rollout(
         input_images = torch.cat((input_images[:, 1:], pred_image), 1)
         input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
-    return pred_image[:, :, :3], pred_state, pred_image[:, :, 4]
+    return input_images, input_states, pred_image[:, :, 3]
 
 
 def preprocess_inputs(inputs):
@@ -361,11 +354,16 @@ def train(dataloader, model: FwdCNN_VAE, optimizer, config, epoch_size, npred):
 
         # start search
         _, _, mu, std = model.goal_policy_net(input_image, input_state)
-        actor_output = ActorOutput(mu, std)
+        # unnormalize mu and std
+        actor_output = ActorOutput(
+            mu * model.goal_stats[1] + model.goal_stats[0], std * model.goal_stats[1]
+        )
         child_goal = model.goal_policy_net.action_sample(
             actor_output, deterministic=False
         )
-        reward = model.reward(input_image, input_state)
+        reward = model.reward(
+            input_image[:, -1, :3].view(-1, 3, 117, 24), input_state[:, -1].view(-1, 4)
+        )
         actor_dist = model.goal_policy_net.action_dist(actor_output)
         child_goal_log_prob = -actor_dist.entropy(child_goal)
 
@@ -379,7 +377,6 @@ def train(dataloader, model: FwdCNN_VAE, optimizer, config, epoch_size, npred):
 
         # TODO: add exploration noise
 
-        root.expand(model)
         MCTS(config).run(root, model, num_simulations=config.num_simulations)
 
         child_values = [

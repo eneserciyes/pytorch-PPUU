@@ -736,8 +736,6 @@ class FwdCNN_VAE(nn.Module):
         z_seq=None,
         noise=None,
     ):
-        # import ipdb
-        # ipdb.set_trace()
         input_images, input_states, _ = inputs
         bsize = input_images.size(0)
         actions = actions.view(bsize, -1, self.opt.n_actions)
@@ -1082,6 +1080,7 @@ class StochasticPolicy(nn.Module):
 
     def action_dist(self, actor_output):
         dist = Normal(actor_output.mu, actor_output.std)
+        dist = torch.distributions.Independent(dist, 1)
         dist = SampleDist(dist)
         return dist
 
@@ -1100,7 +1099,7 @@ class StochasticPolicy(nn.Module):
             ).sample((batch_size,))
             actions = actions.to(device)
             actions.unsqueeze_(0)
-        else:
+        else:                
             action_dist = self.action_dist(actor_output)
             if deterministic:
                 actions = action_dist.mode()
