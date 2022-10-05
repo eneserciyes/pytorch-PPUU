@@ -1,18 +1,21 @@
 import argparse
 import math
-from typing import List, Tuple
+from typing import List, Dict, NamedTuple, Tuple
+from os import path
+import tqdm
 
 import numpy as np
 import os
 import random
 import torch
 import torch.optim as optim
-from os import path
-import tqdm
+from torch.distributions import Normal
+
 
 import planning
 from dataloader import DataLoader
 from models import FwdCNN_VAE
+
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -141,20 +144,34 @@ class MinMaxStats(object):
         return value
 
 
+class ActorOutput(NamedTuple):
+    mu: torch.Tensor
+    std: torch.Tensor
+
+
 class Node:
-    def __init__(self, root=False, dirichlet_alpha=None, exploration_fraction=None):
-        self.root = root
-        self.image = None
-        self.state = None
-        self.ego_car = None
-        self.visit_count = 0
-        self.value_sum = 0
-        self.children_sample_count = 20
-        self.goal_distance = 5
-        self.reward = 0
-        self.dirichlet_alpha = dirichlet_alpha
-        self.exploration_fraction = exploration_fraction
-        self.children = {}
+    def __init__(
+        self,
+        goal_log_prob: float,
+        root=False,
+    ):
+        self.root: bool = root
+        self.state: Tuple = None  # Tuple(image, measurement_state, ego_car)
+        self.prior = None
+        self.visit_count: int = 0
+        self.value_sum: int = 0
+        self.reward: int = 0
+        self.children: Dict = {}
+        self.actor_output: ActorOutput = None
+        self.goal_log_prob = goal_log_prob
+
+        # Configs
+        # self.lambda_l: float = lambda_l
+        # self.lambda_p: float = lambda_p
+        # self.children_sample_count: int = children_sample_count
+        # self.goal_distance: int = goal_distance
+        # self.dirichlet_alpha: float = dirichlet_alpha
+        # self.exploration_fraction: float = exploration_fraction
 
     def expanded(self) -> bool:
         return len(self.children) > 0
@@ -164,40 +181,70 @@ class Node:
             return 0
         return self.value_sum / self.visit_count
 
-    def expand(self, model: FwdCNN_VAE) -> None:
-        goals, _, _, _ = model.goal_policy_net(
-            self.image, self.state, n_samples=self.children_sample_count
-        )  # self.children_sample_count x goal_dimension
+    def expand(
+        self,
+        model: FwdCNN_VAE,
+        actor_output: ActorOutput,
+        state,
+        reward,
+        proposal_action_sample_n=20,
+    ) -> None:
+        self.state = state
+        self.reward = reward
+        self.actor_output = actor_output
 
-        if self.dirichlet_alpha is not None:
-            # add exploration noise to the goals
-            # TODO: tune exploration noise hyperparameters
-            noise = np.random.dirichlet(
-                [self.dirichlet_alpha] * self.children_sample_count
-            )
-            goals = (
-                goals * (1 - self.exploration_fraction)
-                + noise * self.exploration_fraction
-            )
+        _mu = actor_output.mu.repeat(1, proposal_action_sample_n).reshape(
+            proposal_action_sample_n, actor_output.mu.shape[1]
+        )
+        _std = actor_output.std_dev.repeat(1, proposal_action_sample_n).reshape(
+            proposal_action_sample_n, actor_output.std_dev.shape[1]
+        )
+        _actor_output = ActorOutput(_mu, _std)
 
-        for goal in goals:
-            next_image, next_state = rollout(
-                model=model,
-                input_images=self.image,
-                input_states=self.state,
-                input_ego_car=self.ego_car,
-                init_goals=goal,
-                nsteps=self.goal_distance,
-            )
-            child_node = Node()
-            child_node.image, child_node.state, child_node.ego_car = (
-                next_image,
-                next_state,
-                self.ego_car,
-            )
-            cost = model.cost(next_image, next_state)
-            model.reward = 1 / (1e6 + cost)
-            self.children[goal] = child_node
+        goal_policy_dist = model.goal_policy_net.action_dist(_actor_output)
+        _goals = model.goal_policy_net.action_sample(_actor_output)
+        noise_dist = Normal(
+            torch.zeros(_goals.shape).to(_goals.device),
+            torch.ones(_goals.shape).to(_goals.device) * 0.3,
+        )
+        _goals = _goals + noise_dist.sample()
+
+        child_goal_log_prob = -goal_policy_dist.entropy(_goals)
+
+        for child_goal in _goals:
+            self.children[child_goal] = Node(0)
+        self.update_prior()
+
+        # for goal in goals:
+        #     next_image, next_state = rollout(
+        #         model=model,
+        #         input_images=self.image,
+        #         input_states=self.state,
+        #         input_ego_car=self.ego_car,
+        #         init_goals=goal,
+        #         nsteps=self.goal_distance,
+        #     )
+        #     child_node = Node()
+        #     child_node.image, child_node.state, child_node.ego_car = (
+        #         next_image,
+        #         next_state,
+        #         self.ego_car,
+        #     )
+        #     cost = model.cost(next_image, next_state)
+        #     # 0: proximity_cost, 1:lane_cost
+        #     cost = self.lambda_p * cost[:, 0] + self.lambda_l * cost[:, 1]
+        #     child_node.reward = 1 / (1e-6 + cost)
+        #     self.children[goal] = child_node
+
+    def update_prior(self):
+        exp_sum = sum(
+            [
+                (math.e**0.25) ** (child.goal_log_prob)
+                for goal, child in self.children.items()
+            ]
+        )
+        for child in self.children.values():
+            child.prior = (math.e**0.25) ** (child.goal_log_prob) / exp_sum
 
     def add_exploration_noise(self, dirichlet_alpha, exploration_fraction):
         actions = list(self.children.keys())
@@ -217,18 +264,28 @@ class MCTS:
             node: Node = root
             search_path = [node]
             while node.expanded():
-                node = self.select_child(node, min_max_stats)
+                goal, node = self.select_child(node, min_max_stats)
                 search_path.append(node)
-            node.expand(model)
-            value = model.value_net(node.image, node.state)
+
+            parent = search_path[-2]
+            image, state, ego_car = parent.state
+            next_image, next_state, next_ego_car = rollout(model, image, state, ego_car, goal)
+
+            _, _, mu, std = model.goal_policy_net(next_image, next_state)
+            actor_output = ActorOutput(mu, std)
+            value = model.value_net(next_image, next_state)
+            goal = model.goal_policy_net.action_sample(actor_output)
+            reward = model.reward(next_image, next_state)
+
+            node.expand(model, actor_output, state=(next_image, next_state, next_ego_car), reward=reward.item())
             self.backpropagate(search_path, value.item(), min_max_stats)
 
-    def select_child(self, node, min_max_stats) -> Node:
+    def select_child(self, node: Node, min_max_stats) -> Node:
         # TODO: return goal and nodes
 
         _, child = max(
             (self.ucb_score(node, child, min_max_stats), child)
-            for _, child in node.children().items()
+            for _, child in node.children.items()
         )
         return child
 
@@ -257,7 +314,7 @@ class MCTS:
 
 def rollout(
     model, input_images, input_states, input_ego_car, init_goals, nsteps=5
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     Z = model.sample_z(nsteps, method="fp")
     Z = Z.view(nsteps, 1, -1)
 
@@ -282,7 +339,7 @@ def rollout(
         input_images = torch.cat((input_images[:, 1:], pred_image), 1)
         input_states = torch.cat((input_states[:, 1:], pred_state.unsqueeze(1)), 1)
 
-    return pred_image[:, :, :3], pred_state
+    return pred_image[:, :, :3], pred_state, pred_image[:, :, 4]
 
 
 def preprocess_inputs(inputs):
@@ -295,7 +352,7 @@ def preprocess_inputs(inputs):
     return input_images, input_states_orig, input_ego_car_orig[:, :1]
 
 
-def train(dataloader, model, optimizer, config, epoch_size, npred):
+def train(dataloader, model: FwdCNN_VAE, optimizer, config, epoch_size, npred):
     for j in tqdm.tqdm(range(epoch_size)):
         inputs, actions, targets, _, _ = dataloader.get_batch_fm("train", npred)
 
@@ -303,16 +360,45 @@ def train(dataloader, model, optimizer, config, epoch_size, npred):
         input_image, input_state, input_ego_car = preprocess_inputs(inputs)
 
         # start search
-        root = Node(root=True)
-        root.image = input_image
-        root.state = input_state
-        root.ego_car = input_ego_car
+        _, _, mu, std = model.goal_policy_net(input_image, input_state)
+        actor_output = ActorOutput(mu, std)
+        child_goal = model.goal_policy_net.action_sample(
+            actor_output, deterministic=False
+        )
+        reward = model.reward(input_image, input_state)
+        actor_dist = model.goal_policy_net.action_dist(actor_output)
+        child_goal_log_prob = -actor_dist.entropy(child_goal)
+
+        root = Node(0, root=True)
+        root.expand(
+            model,
+            actor_output=actor_output,
+            state=(input_image, input_state, input_ego_car),
+            reward=reward.item(),
+        )
+
+        # TODO: add exploration noise
 
         root.expand(model)
-        root.add_exploration_noise(
-            config.root_diriclet_alpha, config.root_exploration_fraction
-        )
         MCTS(config).run(root, model, num_simulations=config.num_simulations)
+
+        child_values = [
+            (root.reward + config.gamma * child.value(), goal, child)
+            for goal, child in root.children.items()
+        ]
+        _, greedy_goal, greedy_child = max(child_values)
+        visit_counts = [
+            (child.visit_count, goal, child) for goal, child in root.children.items()
+        ]
+        # TODO: add temperature
+        temperature = 1
+        goal_probs = [
+            visit_count_i ** (1 / temperature) for visit_count_i, _, _ in visit_counts
+        ]
+        total_count = sum(goal_probs)
+        goal_probs = [x / total_count for x in goal_probs]
+
+        # TODO: fit goal policy to the new goal probabilities
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+from turtle import distance
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,6 +6,8 @@ import torch.optim as optim
 import random, pdb, copy, os, math, numpy, copy, time
 
 from torch.autograd import Variable
+from torch.distributions import Uniform, Normal, TransformedDistribution, Categorical
+
 
 import utils
 
@@ -816,6 +819,14 @@ class FwdCNN_VAE(nn.Module):
         z_list = torch.stack(z_list, 1)
         return [pred_images, pred_states, z_list], [ploss, ploss2]
 
+    def reward(self, image, state):
+        # TODO: check if this is true
+        cost = self.cost(image, state)
+        # 0: proximity_cost, 1:lane_cost
+        cost = self.opt.lambda_p * cost[:, 0] + self.opt.lambda_l * cost[:, 1]
+        reward = 1 / (1e-6 + cost)
+        return reward
+
     def reset_action_buffer(self, npred):
         self.actions_buffer = torch.zeros(npred, self.opt.n_actions).cuda()
         self.optimizer_a_stats = None
@@ -904,6 +915,46 @@ class CostPredictor(nn.Module):
         return h
 
 
+class SampleDist:
+    def __init__(self, dist, samples=100):
+        self._dist = dist
+        self._samples = samples
+
+    @property
+    def name(self):
+        return "SampleDist"
+
+    def __getattr__(self, name):
+        return getattr(self._dist, name)
+
+    def mean(self, dist):
+        sample = dist.rsample()
+        return torch.mean(sample, 0)
+
+    def mode(self):
+        dist = self._dist.expand((self._samples, *self._dist.batch_shape))
+        sample = dist.rsample()
+        logprob = dist.log_prob(sample)
+        batch_size = sample.size(1)
+        feature_size = sample.size(2)
+        indices = (
+            torch.argmax(logprob, dim=0)
+            .reshape(1, batch_size, 1)
+            .expand(1, batch_size, feature_size)
+        )
+        return torch.gather(sample, 0, indices).squeeze(0)
+
+    def entropy(self, sample=None):
+        dist = self._dist.expand((self._samples, *self._dist.batch_shape))
+        if sample is None:
+            sample = dist.rsample()
+        logprob = dist.log_prob(sample)
+        return -torch.mean(logprob, 0)
+
+    def sample(self):
+        return self._dist.sample()
+
+
 # Stochastic Policy, output is a diagonal Gaussian and learning uses the re-parametrization trick.
 class StochasticPolicy(nn.Module):
     def __init__(
@@ -914,6 +965,7 @@ class StochasticPolicy(nn.Module):
         output_dim=None,
         n_channels=4,
         goals=True,
+        action_space=None,
     ):
         super().__init__()
         self.opt = opt
@@ -924,6 +976,7 @@ class StochasticPolicy(nn.Module):
         self.proj = nn.Linear(self.hsize, opt.n_hidden)
         self.context_dim = context_dim
         self.goals = goals
+        self.action_space = action_space
 
         self.fc = nn.Sequential(
             nn.Linear(opt.n_hidden, opt.n_hidden),
@@ -1026,6 +1079,34 @@ class StochasticPolicy(nn.Module):
             return a.squeeze(), entropy, mu, std, value
         else:
             return a.squeeze(), entropy, mu, std
+
+    def action_dist(self, actor_output):
+        dist = Normal(actor_output.mu, actor_output.std)
+        dist = SampleDist(dist)
+        return dist
+
+    def action_sample(
+        self,
+        actor_output=None,
+        batch_size=1,
+        uniform=False,
+        deterministic=False,
+        device="cpu",
+    ):
+        if uniform:
+            actions = Uniform(
+                torch.FloatTensor(self.action_space.low),
+                torch.FloatTensor(self.action_space.high) + 1e-5,
+            ).sample((batch_size,))
+            actions = actions.to(device)
+            actions.unsqueeze_(0)
+        else:
+            action_dist = self.action_dist(actor_output)
+            if deterministic:
+                actions = action_dist.mode()
+            else:
+                actions = action_dist.rsample()
+        return actions
 
 
 class DeterministicPolicy(nn.Module):
