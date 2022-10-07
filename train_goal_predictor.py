@@ -2,6 +2,7 @@ import math
 import os
 import random
 from os import path
+import matplotlib.pyplot as plt
 
 import numpy
 import torch
@@ -112,9 +113,12 @@ def train_goal_bc(what, inputs, targets, goal_distance, index):
     if index % 500 == 0:
         # unnormalized is still normalized from actual coordinates
         unnormalized_goal_pred = unnormalize_goal(current_goal)
-        planning.visualize_goal_input(
-            what, input_images, current_goal, index, s_std=model.stats["s_std"]
+        viz_image = planning.visualize_goal_input(
+            input_images, unnormalized_goal_pred, s_std=model.stats["s_std"]
         )
+        plt.imshow(viz_image)
+        wandb.log({f"{what}/goal_viz": plt}, step=index)
+        
     return goal_predictor_cost
 
 

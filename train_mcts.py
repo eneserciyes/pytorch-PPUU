@@ -12,6 +12,8 @@ import torch
 import torch.optim as optim
 from torch.distributions import Normal
 
+from igraph import Graph, EdgeSeq
+import plotly.graph_objects as go
 
 import planning
 from dataloader import DataLoader
@@ -154,6 +156,66 @@ class ActorOutput(NamedTuple):
     std: torch.Tensor
 
 
+def create_tree(root):
+    g = Graph()
+    g.add_vertices(1)  # add root
+
+    parent_idx = 0
+    total_nodes = 0
+    unprocessed_nodes = [
+        (parent_idx, goal, child) for goal, child in root.children.items()
+    ]
+    hover_labels = [
+        "Id: {} Value: {} Visit Count: {} prior: {}".format(
+            0,
+            round(root.value(), 2),
+            round(root.visit_count, 2),
+            (None if root.prior is None else round(root.prior, 2)),
+        )
+    ]
+    while len(unprocessed_nodes) > 0:
+        parent_idx, goal, node = unprocessed_nodes.pop(0)
+        child_idx = total_nodes + 1
+        g.add_vertices(1)
+        hover_labels.append(
+            "Id: {} Value: {} reward:{} Visit Count: {} Prior: {} Goal:{}".format(
+                total_nodes + 1,
+                round(node.value(), 2),
+                round(node.reward, 2),
+                round(node.visit_count, 2),
+                None if node.prior is None else round(node.prior, 2),
+                goal.detach().cpu().numpy(),
+            )
+        )
+        g.add_edges([(parent_idx, child_idx)])
+        g.add_vertices(len(node.children.keys()))
+        unprocessed_nodes += [
+            (child_idx, _goal, _child) for _goal, _child in node.children.items()
+        ]
+        total_nodes += 1
+
+    total_nodes += 1  # incr for root index
+    lay = g.layout_auto()
+    return g, lay, total_nodes, hover_labels
+
+def get_node_edge_positions(g, lay, total_nodes):
+    position = {k: lay[k] for k in range(total_nodes)}
+    Y = [lay[k][1] for k in range(total_nodes)]
+    M = max(Y)
+
+    es = EdgeSeq(g)  # sequence of edges
+    E = [e.tuple for e in g.es]  # list of edges
+
+    L = len(position)
+    Xn = [position[k][0] for k in range(L)]
+    Yn = [2 * M - position[k][1] for k in range(L)]
+    Xe = []
+    Ye = []
+    for edge in E:
+        Xe += [position[edge[0]][0], position[edge[1]][0], None]
+        Ye += [2 * M - position[edge[0]][1], 2 * M - position[edge[1]][1], None]
+    return Xn, Yn, Xe, Ye, position, M
+
 class Node:
     def __init__(
         self,
@@ -169,14 +231,6 @@ class Node:
         self.children: Dict = {}
         self.actor_output: ActorOutput = None
         self.goal_log_prob = goal_log_prob
-
-        # Configs
-        # self.lambda_l: float = lambda_l
-        # self.lambda_p: float = lambda_p
-        # self.children_sample_count: int = children_sample_count
-        # self.goal_distance: int = goal_distance
-        # self.dirichlet_alpha: float = dirichlet_alpha
-        # self.exploration_fraction: float = exploration_fraction
 
     def expanded(self) -> bool:
         return len(self.children) > 0
@@ -205,7 +259,6 @@ class Node:
             proposal_action_sample_n, actor_output.std.shape[1]
         )
         _actor_output = ActorOutput(_mu, _std)
-        # TODO: don't unnormalize until here
         goal_policy_dist = model.goal_policy_net.action_dist(_actor_output)
         _goals = model.goal_policy_net.action_sample(_actor_output)
         # TODO: tune noise_dist
@@ -231,6 +284,89 @@ class Node:
         for child in self.children.values():
             child.prior = (math.e**0.25) ** (child.goal_log_prob) / exp_sum
 
+    def show(self):
+
+        #############
+        # Create Tree
+        #############
+        g, lay, total_nodes, hover_labels = create_tree(self)
+
+        ##########
+        # Plot
+        ##########
+        Xn, Yn, Xe, Ye, position, M = get_node_edge_positions(g, lay, total_nodes)
+        v_label = list(map(str, range(total_nodes)))
+        labels = v_label
+
+        fig = go.Figure()
+
+        def make_annotations(pos, text, font_size=10, font_color="rgb(250,250,250)"):
+            L = len(pos)
+            if len(text) != L:
+                raise ValueError("The lists pos and text must have the same len")
+            annotations = []
+            for k in range(L):
+                annotations.append(
+                    dict(
+                        text=labels[
+                            k
+                        ],  # or replace labels with a different list for the text within the circle
+                        x=pos[k][0],
+                        y=2 * M - position[k][1],
+                        xref="x1",
+                        yref="y1",
+                        font=dict(color=font_color, size=font_size),
+                        showarrow=False,
+                    )
+                )
+            return annotations
+
+        fig.add_trace(
+            go.Scatter(
+                x=Xe,
+                y=Ye,
+                mode="lines",
+                name="action",
+                line=dict(color="rgb(210,210,210)", width=1),
+                hoverinfo="none",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=Xn,
+                y=Yn,
+                mode="markers",
+                name="state",
+                marker=dict(
+                    symbol="circle-dot",
+                    size=18,
+                    color="#6175c1",  # '#DB4551',
+                    line=dict(color="rgb(50,50,50)", width=1),
+                ),
+                text=hover_labels,
+                hoverinfo="text",
+                opacity=0.8,
+            )
+        )
+        axis = dict(
+            showline=False,  # hide axis line, grid, ticklabels and  title
+            zeroline=False,
+            showgrid=True,
+            showticklabels=True,
+        )
+
+        fig.update_layout(
+            annotations=make_annotations(position, v_label),
+            font_size=12,
+            showlegend=True,
+            xaxis=axis,
+            yaxis=axis,
+            margin=dict(l=40, r=40, b=85, t=100),
+            hovermode="closest",
+            plot_bgcolor="rgb(248,248,248)",
+        )
+        fig.show()
+
     def add_exploration_noise(self, dirichlet_alpha, exploration_fraction):
         actions = list(self.children.keys())
         noise = np.random.dirichlet([dirichlet_alpha] * len(actions))
@@ -254,6 +390,8 @@ class MCTS:
 
             parent = search_path[-2]
             image, state, ego_car = parent.state
+            # unnormalize goal
+            goal = goal * model.goal_stats[1] + model.goal_stats[0]
             next_image, next_state, next_ego_car = rollout(
                 model, image, state, ego_car, goal
             )
@@ -263,7 +401,10 @@ class MCTS:
             # TODO: check if value net is correct like this
             value, _, _, _ = model.value_net(next_image, next_state)
             goal = model.goal_policy_net.action_sample(actor_output)
-            reward = model.reward(next_image[:, -1, :3].view(-1, 3, 117, 24), next_state[:, -1].view(-1, 4))
+            reward = model.reward(
+                next_image[:, -1, :3].view(-1, 3, 117, 24),
+                next_state[:, -1].view(-1, 4),
+            )
 
             node.expand(
                 model,
@@ -277,8 +418,11 @@ class MCTS:
         # TODO: return goal and nodes
 
         _, goal, child = max(
-            [(self.ucb_score(node, child, min_max_stats), goal, child)
-            for goal, child in node.children.items()], key=itemgetter(0)
+            [
+                (self.ucb_score(node, child, min_max_stats), goal, child)
+                for goal, child in node.children.items()
+            ],
+            key=itemgetter(0),
         )
         return goal, child
 
@@ -355,9 +499,7 @@ def train(dataloader, model: FwdCNN_VAE, optimizer, config, epoch_size, npred):
         # start search
         _, _, mu, std = model.goal_policy_net(input_image, input_state)
         # unnormalize mu and std
-        actor_output = ActorOutput(
-            mu * model.goal_stats[1] + model.goal_stats[0], std * model.goal_stats[1]
-        )
+        actor_output = ActorOutput(mu, std)
         child_goal = model.goal_policy_net.action_sample(
             actor_output, deterministic=False
         )
@@ -378,6 +520,7 @@ def train(dataloader, model: FwdCNN_VAE, optimizer, config, epoch_size, npred):
         # TODO: add exploration noise
 
         MCTS(config).run(root, model, num_simulations=config.num_simulations)
+        root.show()
 
         child_values = [
             (root.reward + config.gamma * child.value(), goal, child)
