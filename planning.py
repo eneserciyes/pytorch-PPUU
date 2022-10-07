@@ -431,8 +431,8 @@ def visualize_goal_input(
 ) -> torch.Tensor:
     """
     input_images: B x Conditional x 4 x H x W
-    input_states: B x Conditional x 4
     current_goal: B x 2
+    s_std: 2
     """
     # ego image creation
     images_with_ego = input_images.clone()
